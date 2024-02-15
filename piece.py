@@ -2,7 +2,6 @@ import dataclasses as dc
 from enum import Enum
 from pathlib import Path
 from typing import List
-
 import pygame
 
 
@@ -68,7 +67,7 @@ class Piece:
     icon: pygame.Surface = None
     moved: int = 0
     created: bool = False
-
+    legal_moves: List = dc.field(default_factory=list)
     def __post_init__(self):
         try: 
             self.icon = pygame.image.load(
@@ -77,9 +76,20 @@ class Piece:
 
         except: 
            pass
-    def _is_legal_move(self, *args, **kwargs) -> List[MoveState]:
-        return [MoveState.MOVED]
-
+    def __str__(self):
+        return f"{self.color.name} {self.piece_type.name} at {self.position}"
+    def _is_legal_move(self, new_position, board: "Board"):
+        if new_position in self.legal_moves:
+            if board.get(new_position) is not None:
+                if board.get(new_position).color != self.color:
+                    return [MoveState.CAPTURED]
+                else:
+                    return [MoveState.OCCUPIED]
+            return [MoveState.MOVED]
+        return [MoveState.NOTALLOWED]
+    def update_legal_moves(self, board: "Board"):
+        pass
+    
     def move(self, new_position, board: "Board"):
         if self.created == False:
             self.position = new_position
@@ -95,184 +105,221 @@ class Piece:
 @dc.dataclass
 class Pawn(Piece):
     piece_type: PieceType = PieceType.PAWN
-
     def _is_legal_move(self, new_position, board: "Board"):
-        states = []
-        dx = new_position.x - self.position.x
-        dy = new_position.y - self.position.y
+        if new_position in self.legal_moves:
+            if board.get(new_position) is not None:
+                if board.get(new_position).color != self.color and abs(new_position.x - self.position.x) == 1:
+                    return [MoveState.CAPTURED]
+                    
+                else:
+                    return [MoveState.OCCUPIED]
+            return [MoveState.MOVED]
+        return [MoveState.NOTALLOWED]
+    def update_legal_moves(self, board: "Board"):
+        moves = []
         direction = -1 if self.color == Color.WHITE else 1
-
-        if dy == direction and dx == 0 and board.get(new_position) is None:
-            states.append(MoveState.MOVED)
-        elif (
-            dy == 2 * direction
-            and dx == 0
-            and self.moved == 0
-            and board.get(Position(self.position.x, self.position.y + direction)) is None
-            and board.get(new_position) is None
-        ):
-            states.append(MoveState.MOVED)
-        elif abs(dx) == 1 and dy == direction:
-            piece = board.get(new_position)
-            if piece and piece.color != self.color:
-                states.append(MoveState.CAPTURED)
-
-        return states or [MoveState.NOTALLOWED]
-
+        if board.get(Position(self.position.x, self.position.y + direction)) is None:
+            moves.append(Position(self.position.x, self.position.y + direction))
+            if self.moved == 0 and board.get(Position(self.position.x, self.position.y + 2 * direction)) is None:
+                moves.append(Position(self.position.x, self.position.y + 2 * direction))
+        if board.get(Position(self.position.x + 1, self.position.y + direction)):
+            moves.append(Position(self.position.x + 1, self.position.y + direction))
+        if board.get(Position(self.position.x - 1, self.position.y + direction)):
+            moves.append(Position(self.position.x - 1, self.position.y + direction))
+        self.legal_moves = moves
 
 @dc.dataclass
 class Rook(Piece):
     piece_type: PieceType = PieceType.ROOK
-
-    def _is_legal_move(self, new_position, board: "Board"):
-        states = []
-        dx = new_position.x - self.position.x
-        dy = new_position.y - self.position.y
-
-        if dx == 0:  # Vertical move
-            step = 1 if dy > 0 else -1
-            for i in range(1, abs(dy)):
-                if board.get(Position(self.position.x, self.position.y + i * step)):
-                    states.append(MoveState.NOTALLOWED)
-                    return states
-
-        elif dy == 0:  # Horizontal move
-            step = 1 if dx > 0 else -1
-            for i in range(1, abs(dx)):
-                if board.get(Position(self.position.x + i * step, self.position.y)):
-                    states.append(MoveState.NOTALLOWED)
-                    return states
-        else:
-            states.append(MoveState.NOTALLOWED)
-            return states
-        piece = board.get(new_position)
-        if piece:
-            if piece.color != self.color:
-                states.append(MoveState.CAPTURED)
-            else:
-                states.append(MoveState.NOTALLOWED)
-
-        return states or [MoveState.MOVED]
-
+    def update_legal_moves(self, board: "Board"):
+        moves = []
+        for i in range(1, 8):
+            if self.position.y + i < 8:
+                if board.get(Position(self.position.x, self.position.y + i)) is None:
+                    moves.append(Position(self.position.x, self.position.y + i))
+                else:
+                    if board.get(Position(self.position.x, self.position.y + i)).color != self.color:
+                        moves.append(Position(self.position.x, self.position.y + i))
+                    break
+        for i in range(1, 8):
+            if self.position.y - i >= 0:
+                if board.get(Position(self.position.x, self.position.y - i)) is None:
+                    moves.append(Position(self.position.x, self.position.y - i))
+                else:
+                    if board.get(Position(self.position.x, self.position.y - i)).color != self.color:
+                        moves.append(Position(self.position.x, self.position.y - i))
+                    break
+        for i in range(1, 8):
+            if self.position.x + i < 8:
+                if board.get(Position(self.position.x + i, self.position.y)) is None:
+                    moves.append(Position(self.position.x + i, self.position.y))
+                else:
+                    if board.get(Position(self.position.x + i, self.position.y)).color != self.color:
+                        moves.append(Position(self.position.x + i, self.position.y))
+                    break
+        for i in range(1, 8):
+            if self.position.x - i >= 0:
+                if board.get(Position(self.position.x - i, self.position.y)) is None:
+                    moves.append(Position(self.position.x - i, self.position.y))
+                else:
+                    if board.get(Position(self.position.x - i, self.position.y)).color != self.color:
+                        moves.append(Position(self.position.x - i, self.position.y))
+                    break
+        self.legal_moves = moves
 
 @dc.dataclass
 class Bishop(Piece):
     piece_type: PieceType = PieceType.BISHOP
-
-    def _is_legal_move(self, new_position, board: "Board"):
-        states = []
-        dx = new_position.x - self.position.x
-        dy = new_position.y - self.position.y
-
-        if abs(dx) == abs(dy):
-            step_x = 1 if dx > 0 else -1
-            step_y = 1 if dy > 0 else -1
-            for i in range(1, abs(dx)):
-                if board.get(
-                    Position(self.position.x + i * step_x, self.position.y + i * step_y)
-                ):
-                    states.append(MoveState.NOTALLOWED)
-                    return states
-        else:
-            states.append(MoveState.NOTALLOWED)
-            return states
-        piece = board.get(new_position)
-        if piece:
-            if piece.color != self.color:
-                states.append(MoveState.CAPTURED)
-            else:
-                states.append(MoveState.NOTALLOWED)
-
-        return states or [MoveState.MOVED]
-
+    def update_legal_moves(self, board: "Board"):
+        moves = []
+        for i in range(1, 8):
+            if self.position.x + i < 8 and self.position.y + i < 8:
+                if board.get(Position(self.position.x + i, self.position.y + i)) is None:
+                    moves.append(Position(self.position.x + i, self.position.y + i))
+                else:
+                    if board.get(Position(self.position.x + i, self.position.y + i)).color != self.color:
+                        moves.append(Position(self.position.x + i, self.position.y + i))
+                    break
+        for i in range(1, 8):
+            if self.position.x - i >= 0 and self.position.y - i >= 0:
+                if board.get(Position(self.position.x - i, self.position.y - i)) is None:
+                    moves.append(Position(self.position.x - i, self.position.y - i))
+                else:
+                    if board.get(Position(self.position.x - i, self.position.y - i)).color != self.color:
+                        moves.append(Position(self.position.x - i, self.position.y - i))
+                    break
+        for i in range(1, 8):
+            if self.position.x + i < 8 and self.position.y - i >= 0:
+                if board.get(Position(self.position.x + i, self.position.y - i)) is None:
+                    moves.append(Position(self.position.x + i, self.position.y - i))
+                else:
+                    if board.get(Position(self.position.x + i, self.position.y - i)).color != self.color:
+                        moves.append(Position(self.position.x + i, self.position.y - i))
+                    break
+        for i in range(1, 8):
+            if self.position.x - i >= 0 and self.position.y + i < 8:
+                if board.get(Position(self.position.x - i, self.position.y + i)) is None:
+                    moves.append(Position(self.position.x - i, self.position.y + i))
+                else:
+                    if board.get(Position(self.position.x - i, self.position.y + i)).color != self.color:
+                        moves.append(Position(self.position.x - i, self.position.y + i))
+                    break
+        self.legal_moves = moves
 
 @dc.dataclass
 class Knight(Piece):
     piece_type: PieceType = PieceType.KNIGHT
-
-    def _is_legal_move(self, new_position, board: "Board"):
-        states = []
-        dx = new_position.x - self.position.x
-        dy = new_position.y - self.position.y
-
-        if abs(dx * dy) == 2:
-            piece = board.get(new_position)
-            if piece:
-                if piece.color != self.color:
-                    states.append(MoveState.CAPTURED)
-                else:
-                    states.append(MoveState.NOTALLOWED)
+    def update_legal_moves(self, board: "Board"):
+        moves = []
+        for dx, dy in [
+            (2, 1),
+            (2, -1),
+            (-2, 1),
+            (-2, -1),
+            (1, 2),
+            (1, -2),
+            (-1, 2),
+            (-1, -2),
+        ]:
+            new_position = Position(self.position.x + dx, self.position.y + dy)
+            if board.get(new_position) is None:
+                moves.append(new_position)
             else:
-                states.append(MoveState.MOVED)
-        else:
-            states.append(MoveState.NOTALLOWED)
-
-        return states or [MoveState.NOTALLOWED]
-
+                if isinstance(board.get(new_position),Piece) and board.get(new_position).color != self.color:
+                    moves.append(new_position)
+        self.legal_moves = moves
 
 @dc.dataclass
 class Queen(Piece):
     piece_type: PieceType = PieceType.QUEEN
-
-    def _is_legal_move(self, new_position, board: "Board"):
-        states = []
-        dx = new_position.x - self.position.x
-        dy = new_position.y - self.position.y
-
-        if dx == 0:
-            step = 1 if dy > 0 else -1
-            for i in range(1, abs(dy)):
-                if board.get(Position(self.position.x, self.position.y + i * step)):
-                    states.append(MoveState.NOTALLOWED)
-                    return states
-        elif dy == 0:
-            step = 1 if dx > 0 else -1
-            for i in range(1, abs(dx)):
-                if board.get(Position(self.position.x + i * step, self.position.y)):
-                    states.append(MoveState.NOTALLOWED)
-                    return states
-        elif abs(dx) == abs(dy):
-            step_x = 1 if dx > 0 else -1
-            step_y = 1 if dy > 0 else -1
-            for i in range(1, abs(dx)):
-                if board.get(
-                    Position(self.position.x + i * step_x, self.position.y + i * step_y)
-                ):
-                    states.append(MoveState.NOTALLOWED)
-                    return states
-        else:
-            states.append(MoveState.NOTALLOWED)
-            return states
-        piece = board.get(new_position)
-        if piece:
-            if piece.color != self.color:
-                states.append(MoveState.CAPTURED)
-            else:
-                states.append(MoveState.NOTALLOWED)
-
-        return states or [MoveState.MOVED]
+    def update_legal_moves(self, board: "Board"):
+        moves = []
+        for i in range(1, 8):
+            if self.position.y + i < 8:
+                if board.get(Position(self.position.x, self.position.y + i)) is None:
+                    moves.append(Position(self.position.x, self.position.y + i))
+                else:
+                    if board.get(Position(self.position.x, self.position.y + i)).color != self.color:
+                        moves.append(Position(self.position.x, self.position.y + i))
+                    break
+        for i in range(1, 8):
+            if self.position.y - i >= 0:
+                if board.get(Position(self.position.x, self.position.y - i)) is None:
+                    moves.append(Position(self.position.x, self.position.y - i))
+                else:
+                    if board.get(Position(self.position.x, self.position.y - i)).color != self.color:
+                        moves.append(Position(self.position.x, self.position.y - i))
+                    break
+        for i in range(1, 8):
+            if self.position.x + i < 8:
+                if board.get(Position(self.position.x + i, self.position.y)) is None:
+                    moves.append(Position(self.position.x + i, self.position.y))
+                else:
+                    if board.get(Position(self.position.x + i, self.position.y)).color != self.color:
+                        moves.append(Position(self.position.x + i, self.position.y))
+                    break
+        for i in range(1, 8):
+            if self.position.x - i >= 0:
+                if board.get(Position(self.position.x - i, self.position.y)) is None:
+                    moves.append(Position(self.position.x - i, self.position.y))
+                else:
+                    if board.get(Position(self.position.x - i, self.position.y)).color != self.color:
+                        moves.append(Position(self.position.x - i, self.position.y))
+                    break
+        for i in range(1, 8):
+            if self.position.x + i < 8 and self.position.y + i < 8:
+                if board.get(Position(self.position.x + i, self.position.y + i)) is None:
+                    moves.append(Position(self.position.x + i, self.position.y + i))
+                else:
+                    if board.get(Position(self.position.x + i, self.position.y + i)).color != self.color:
+                        moves.append(Position(self.position.x + i, self.position.y + i))
+                    break
+        for i in range(1, 8):
+            if self.position.x - i >= 0 and self.position.y - i >= 0:
+                if board.get(Position(self.position.x - i, self.position.y - i)) is None:
+                    moves.append(Position(self.position.x - i, self.position.y - i))
+                else:
+                    if board.get(Position(self.position.x - i, self.position.y - i)).color != self.color:
+                        moves.append(Position(self.position.x - i, self.position.y - i))
+                    break
+        for i in range(1, 8):
+            if self.position.x + i < 8 and self.position.y - i >= 0:
+                if board.get(Position(self.position.x + i, self.position.y - i)) is None:
+                    moves.append(Position(self.position.x + i, self.position.y - i))
+                else:
+                    if board.get(Position(self.position.x + i, self.position.y - i)).color != self.color:
+                        moves.append(Position(self.position.x + i, self.position.y - i))
+                    break
+        for i in range(1, 8):
+            if self.position.x - i >= 0 and self.position.y + i < 8:
+                if board.get(Position(self.position.x - i, self.position.y + i)) is None:
+                    moves.append(Position(self.position.x - i, self.position.y + i))
+                else:
+                    if board.get(Position(self.position.x - i, self.position.y + i)).color != self.color:
+                        moves.append(Position(self.position.x - i, self.position.y + i))
+                    break
+        self.legal_moves = moves
 
 
 @dc.dataclass
 class King(Piece):
     piece_type: PieceType = PieceType.KING
-
-    def _is_legal_move(self, new_position, board: "Board"):
-        states = []
-
-        dx = new_position.x - self.position.x
-        dy = new_position.y - self.position.y
-
-        if abs(dx) <= 1 and abs(dy) <= 1:
-            piece = board.get(new_position)
-            if piece:
-                if piece.color != self.color:
-                    states.append(MoveState.CAPTURED)
-                else:
-                    states.append(MoveState.NOTALLOWED)
+    def update_legal_moves(self, board: "Board"):
+        moves = []
+        for dx, dy in [
+            (1, 0),
+            (1, 1),
+            (0, 1),
+            (-1, 1),
+            (-1, 0),
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+        ]:
+            new_position = Position(self.position.x + dx, self.position.y + dy)
+            if board.get(new_position) is None:
+                moves.append(new_position)
             else:
-                states.append(MoveState.MOVED)
-        else:
-            states.append(MoveState.NOTALLOWED)
-
-        return states or [MoveState.NOTALLOWED]
+                if isinstance(board.get(new_position),Piece) and board.get(new_position).color != self.color:
+                    moves.append(new_position)
+        self.legal_moves = moves
