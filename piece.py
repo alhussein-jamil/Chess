@@ -2,6 +2,7 @@ import dataclasses as dc
 from enum import Enum
 from pathlib import Path
 from typing import List
+
 import pygame
 
 
@@ -68,16 +69,21 @@ class Piece:
     moved: int = 0
     created: bool = False
     legal_moves: List = dc.field(default_factory=list)
+
     def __post_init__(self):
-        try: 
+        try:
             self.icon = pygame.image.load(
-                Path(f"assets/{self.piece_type.name.lower()}_{self.color.name.lower()}.png")
+                Path(
+                    f"assets/{self.piece_type.name.lower()}_{self.color.name.lower()}.png"
+                )
             ).convert_alpha()
 
-        except: 
-           pass
+        except:
+            pass
+
     def __str__(self):
         return f"{self.color.name} {self.piece_type.name} at {self.position}"
+
     def _is_legal_move(self, new_position, board: "Board"):
         if new_position in self.legal_moves:
             if board.get(new_position) is not None:
@@ -87,9 +93,10 @@ class Piece:
                     return [MoveState.OCCUPIED]
             return [MoveState.MOVED]
         return [MoveState.NOTALLOWED]
+
     def update_legal_moves(self, board: "Board"):
         pass
-    
+
     def move(self, new_position, board: "Board"):
         if self.created == False:
             self.position = new_position
@@ -98,29 +105,40 @@ class Piece:
 
         legality = self._is_legal_move(new_position, board)
 
-
         return legality
 
 
 @dc.dataclass
 class Pawn(Piece):
     piece_type: PieceType = PieceType.PAWN
+
     def _is_legal_move(self, new_position, board: "Board"):
-        if new_position in self.legal_moves:
-            if board.get(new_position) is not None:
-                if board.get(new_position).color != self.color and abs(new_position.x - self.position.x) == 1:
+        if board.get(new_position) is not None:
+                direction = -1 if self.color == Color.WHITE else 1
+                if (
+                    board.get(new_position).color != self.color
+                    and abs(new_position.x - self.position.x) == 1
+                    and  new_position.y - self.position.y == direction
+                ):
                     return [MoveState.CAPTURED]
-                    
-                else:
-                    return [MoveState.OCCUPIED]
+
+        if new_position in self.legal_moves:
+
             return [MoveState.MOVED]
         return [MoveState.NOTALLOWED]
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         direction = -1 if self.color == Color.WHITE else 1
         if board.get(Position(self.position.x, self.position.y + direction)) is None:
             moves.append(Position(self.position.x, self.position.y + direction))
-            if self.moved == 0 and board.get(Position(self.position.x, self.position.y + 2 * direction)) is None:
+            if (
+                self.moved == 0
+                and board.get(
+                    Position(self.position.x, self.position.y + 2 * direction)
+                )
+                is None
+            ):
                 moves.append(Position(self.position.x, self.position.y + 2 * direction))
         if board.get(Position(self.position.x + 1, self.position.y + direction)):
             moves.append(Position(self.position.x + 1, self.position.y + direction))
@@ -128,9 +146,11 @@ class Pawn(Piece):
             moves.append(Position(self.position.x - 1, self.position.y + direction))
         self.legal_moves = moves
 
+
 @dc.dataclass
 class Rook(Piece):
     piece_type: PieceType = PieceType.ROOK
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         for i in range(1, 8):
@@ -138,7 +158,10 @@ class Rook(Piece):
                 if board.get(Position(self.position.x, self.position.y + i)) is None:
                     moves.append(Position(self.position.x, self.position.y + i))
                 else:
-                    if board.get(Position(self.position.x, self.position.y + i)).color != self.color:
+                    if (
+                        board.get(Position(self.position.x, self.position.y + i)).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x, self.position.y + i))
                     break
         for i in range(1, 8):
@@ -146,7 +169,10 @@ class Rook(Piece):
                 if board.get(Position(self.position.x, self.position.y - i)) is None:
                     moves.append(Position(self.position.x, self.position.y - i))
                 else:
-                    if board.get(Position(self.position.x, self.position.y - i)).color != self.color:
+                    if (
+                        board.get(Position(self.position.x, self.position.y - i)).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x, self.position.y - i))
                     break
         for i in range(1, 8):
@@ -154,7 +180,10 @@ class Rook(Piece):
                 if board.get(Position(self.position.x + i, self.position.y)) is None:
                     moves.append(Position(self.position.x + i, self.position.y))
                 else:
-                    if board.get(Position(self.position.x + i, self.position.y)).color != self.color:
+                    if (
+                        board.get(Position(self.position.x + i, self.position.y)).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x + i, self.position.y))
                     break
         for i in range(1, 8):
@@ -162,53 +191,92 @@ class Rook(Piece):
                 if board.get(Position(self.position.x - i, self.position.y)) is None:
                     moves.append(Position(self.position.x - i, self.position.y))
                 else:
-                    if board.get(Position(self.position.x - i, self.position.y)).color != self.color:
+                    if (
+                        board.get(Position(self.position.x - i, self.position.y)).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x - i, self.position.y))
                     break
         self.legal_moves = moves
 
+
 @dc.dataclass
 class Bishop(Piece):
     piece_type: PieceType = PieceType.BISHOP
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         for i in range(1, 8):
             if self.position.x + i < 8 and self.position.y + i < 8:
-                if board.get(Position(self.position.x + i, self.position.y + i)) is None:
+                if (
+                    board.get(Position(self.position.x + i, self.position.y + i))
+                    is None
+                ):
                     moves.append(Position(self.position.x + i, self.position.y + i))
                 else:
-                    if board.get(Position(self.position.x + i, self.position.y + i)).color != self.color:
+                    if (
+                        board.get(
+                            Position(self.position.x + i, self.position.y + i)
+                        ).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x + i, self.position.y + i))
                     break
         for i in range(1, 8):
             if self.position.x - i >= 0 and self.position.y - i >= 0:
-                if board.get(Position(self.position.x - i, self.position.y - i)) is None:
+                if (
+                    board.get(Position(self.position.x - i, self.position.y - i))
+                    is None
+                ):
                     moves.append(Position(self.position.x - i, self.position.y - i))
                 else:
-                    if board.get(Position(self.position.x - i, self.position.y - i)).color != self.color:
+                    if (
+                        board.get(
+                            Position(self.position.x - i, self.position.y - i)
+                        ).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x - i, self.position.y - i))
                     break
         for i in range(1, 8):
             if self.position.x + i < 8 and self.position.y - i >= 0:
-                if board.get(Position(self.position.x + i, self.position.y - i)) is None:
+                if (
+                    board.get(Position(self.position.x + i, self.position.y - i))
+                    is None
+                ):
                     moves.append(Position(self.position.x + i, self.position.y - i))
                 else:
-                    if board.get(Position(self.position.x + i, self.position.y - i)).color != self.color:
+                    if (
+                        board.get(
+                            Position(self.position.x + i, self.position.y - i)
+                        ).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x + i, self.position.y - i))
                     break
         for i in range(1, 8):
             if self.position.x - i >= 0 and self.position.y + i < 8:
-                if board.get(Position(self.position.x - i, self.position.y + i)) is None:
+                if (
+                    board.get(Position(self.position.x - i, self.position.y + i))
+                    is None
+                ):
                     moves.append(Position(self.position.x - i, self.position.y + i))
                 else:
-                    if board.get(Position(self.position.x - i, self.position.y + i)).color != self.color:
+                    if (
+                        board.get(
+                            Position(self.position.x - i, self.position.y + i)
+                        ).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x - i, self.position.y + i))
                     break
         self.legal_moves = moves
 
+
 @dc.dataclass
 class Knight(Piece):
     piece_type: PieceType = PieceType.KNIGHT
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         for dx, dy in [
@@ -225,13 +293,18 @@ class Knight(Piece):
             if board.get(new_position) is None:
                 moves.append(new_position)
             else:
-                if isinstance(board.get(new_position),Piece) and board.get(new_position).color != self.color:
+                if (
+                    isinstance(board.get(new_position), Piece)
+                    and board.get(new_position).color != self.color
+                ):
                     moves.append(new_position)
         self.legal_moves = moves
+
 
 @dc.dataclass
 class Queen(Piece):
     piece_type: PieceType = PieceType.QUEEN
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         for i in range(1, 8):
@@ -239,7 +312,10 @@ class Queen(Piece):
                 if board.get(Position(self.position.x, self.position.y + i)) is None:
                     moves.append(Position(self.position.x, self.position.y + i))
                 else:
-                    if board.get(Position(self.position.x, self.position.y + i)).color != self.color:
+                    if (
+                        board.get(Position(self.position.x, self.position.y + i)).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x, self.position.y + i))
                     break
         for i in range(1, 8):
@@ -247,7 +323,10 @@ class Queen(Piece):
                 if board.get(Position(self.position.x, self.position.y - i)) is None:
                     moves.append(Position(self.position.x, self.position.y - i))
                 else:
-                    if board.get(Position(self.position.x, self.position.y - i)).color != self.color:
+                    if (
+                        board.get(Position(self.position.x, self.position.y - i)).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x, self.position.y - i))
                     break
         for i in range(1, 8):
@@ -255,7 +334,10 @@ class Queen(Piece):
                 if board.get(Position(self.position.x + i, self.position.y)) is None:
                     moves.append(Position(self.position.x + i, self.position.y))
                 else:
-                    if board.get(Position(self.position.x + i, self.position.y)).color != self.color:
+                    if (
+                        board.get(Position(self.position.x + i, self.position.y)).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x + i, self.position.y))
                     break
         for i in range(1, 8):
@@ -263,39 +345,74 @@ class Queen(Piece):
                 if board.get(Position(self.position.x - i, self.position.y)) is None:
                     moves.append(Position(self.position.x - i, self.position.y))
                 else:
-                    if board.get(Position(self.position.x - i, self.position.y)).color != self.color:
+                    if (
+                        board.get(Position(self.position.x - i, self.position.y)).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x - i, self.position.y))
                     break
         for i in range(1, 8):
             if self.position.x + i < 8 and self.position.y + i < 8:
-                if board.get(Position(self.position.x + i, self.position.y + i)) is None:
+                if (
+                    board.get(Position(self.position.x + i, self.position.y + i))
+                    is None
+                ):
                     moves.append(Position(self.position.x + i, self.position.y + i))
                 else:
-                    if board.get(Position(self.position.x + i, self.position.y + i)).color != self.color:
+                    if (
+                        board.get(
+                            Position(self.position.x + i, self.position.y + i)
+                        ).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x + i, self.position.y + i))
                     break
         for i in range(1, 8):
             if self.position.x - i >= 0 and self.position.y - i >= 0:
-                if board.get(Position(self.position.x - i, self.position.y - i)) is None:
+                if (
+                    board.get(Position(self.position.x - i, self.position.y - i))
+                    is None
+                ):
                     moves.append(Position(self.position.x - i, self.position.y - i))
                 else:
-                    if board.get(Position(self.position.x - i, self.position.y - i)).color != self.color:
+                    if (
+                        board.get(
+                            Position(self.position.x - i, self.position.y - i)
+                        ).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x - i, self.position.y - i))
                     break
         for i in range(1, 8):
             if self.position.x + i < 8 and self.position.y - i >= 0:
-                if board.get(Position(self.position.x + i, self.position.y - i)) is None:
+                if (
+                    board.get(Position(self.position.x + i, self.position.y - i))
+                    is None
+                ):
                     moves.append(Position(self.position.x + i, self.position.y - i))
                 else:
-                    if board.get(Position(self.position.x + i, self.position.y - i)).color != self.color:
+                    if (
+                        board.get(
+                            Position(self.position.x + i, self.position.y - i)
+                        ).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x + i, self.position.y - i))
                     break
         for i in range(1, 8):
             if self.position.x - i >= 0 and self.position.y + i < 8:
-                if board.get(Position(self.position.x - i, self.position.y + i)) is None:
+                if (
+                    board.get(Position(self.position.x - i, self.position.y + i))
+                    is None
+                ):
                     moves.append(Position(self.position.x - i, self.position.y + i))
                 else:
-                    if board.get(Position(self.position.x - i, self.position.y + i)).color != self.color:
+                    if (
+                        board.get(
+                            Position(self.position.x - i, self.position.y + i)
+                        ).color
+                        != self.color
+                    ):
                         moves.append(Position(self.position.x - i, self.position.y + i))
                     break
         self.legal_moves = moves
@@ -304,6 +421,7 @@ class Queen(Piece):
 @dc.dataclass
 class King(Piece):
     piece_type: PieceType = PieceType.KING
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         for dx, dy in [
@@ -320,6 +438,9 @@ class King(Piece):
             if board.get(new_position) is None:
                 moves.append(new_position)
             else:
-                if isinstance(board.get(new_position),Piece) and board.get(new_position).color != self.color:
+                if (
+                    isinstance(board.get(new_position), Piece)
+                    and board.get(new_position).color != self.color
+                ):
                     moves.append(new_position)
         self.legal_moves = moves

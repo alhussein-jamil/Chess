@@ -1,18 +1,18 @@
 from random import randint
+
 import pygame
+
 from board import Board
-from piece import Bishop, Color, King, Knight, Pawn, Queen, Rook, Position
+from piece import Bishop, Color, King, Knight, Pawn, Position, Queen, Rook
 
 # Initialize Pygame
 pygame.init()
 
 # Set screen dimensions
-screen_width = 1000  # Increased width to accommodate buttons
+screen_width = 1050  # Increased width to accommodate buttons
 screen_height = 850
 
 chessboard = Board(dim_x=8, dim_y=8)
-
-
 
 # Set window title (optional)
 pygame.display.set_caption("Chess Game")
@@ -29,12 +29,13 @@ GRAY = (200, 200, 200)
 button_width = 150
 button_height = 50
 button_margin = 20
-button_x = screen_width - button_width - button_margin  # Adjusted position for first button
+button_x = (
+    screen_width - button_width - button_margin
+)  # Adjusted position for first button
 button_y_add_piece = 50  # Adjusted position for Add Piece button
 
 # Define font
 font = pygame.font.Font(None, 30)
-
 
 
 # Function to create different types of pieces
@@ -57,6 +58,7 @@ def add_piece(piece_type):
 
     chessboard.dragged_piece = new_piece
 
+
 # Function to create button text
 def draw_text(text, font, color, surface, x, y):
     textobj = font.render(text, 1, color)
@@ -64,16 +66,17 @@ def draw_text(text, font, color, surface, x, y):
     textrect.center = (x, y)
     surface.blit(textobj, textrect)
 
+
 # Function to draw buttons
 def draw_button(surface, color, x, y, width, height, text):
     pygame.draw.rect(surface, color, (x, y, width, height))
     draw_text(text, font, BLACK, surface, x + width // 2, y + height // 2)
 
+
 # Game loop
 running = True
 new_piece_color = Color.WHITE
 toggle_button_color = GRAY  # Default color for the toggle button
-
 
 
 STARTINGCONFIGURATION = [
