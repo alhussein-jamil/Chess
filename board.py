@@ -5,7 +5,6 @@ import pygame
 
 from piece import ILLEGAL, LEGAL, Color, MoveState, Piece, PieceType, Position, Bishop, King, Knight, Pawn, Queen, Rook
 
-
 @dc.dataclass
 class Board:
     dim_x: int
@@ -18,7 +17,7 @@ class Board:
     checkmates: Dict[Color, bool] = dc.field(default_factory=dict)
     turn: Color = Color.WHITE
     promotion: PieceType = PieceType.KNIGHT
-
+    checker: Piece = None
     def promote_to(self,piece: Piece): 
         match self.promotion:
             case PieceType.QUEEN:
@@ -44,24 +43,31 @@ class Board:
         self.checks = {Color.WHITE: False, Color.BLACK: False}
         self.checkmates = {Color.WHITE: False, Color.BLACK: False}
 
-    def update(self):
-
+    def update_board(self):
         self.board = [[None for _ in range(self.dim_x)] for _ in range(self.dim_y)]
         for piece in self.pieces:
             self.board[piece.position.y][piece.position.x] = piece
+
+    def update(self):
+        self.update_board()
         for piece in self.pieces:
             piece.update_legal_moves(self)
         self.updateControlledSquares()
         self.update_checks()
 
     def checkmate(self, color: Color):
+        print("\n\n")
+        for piece in self.pieces:
+            piece.update_legal_moves(self)
         for piece in self.pieces:
             if piece.color == color:
+                print("Checking", piece, piece.legal_moves)
                 for new_position in piece.legal_moves:
                     trying = self.try_move(piece, new_position, False)
-                    self.update()
+                    # print(f"\tTrying {piece} to {new_position} is {trying}")
                     if trying:
                         return False
+        king = [p for p in self.pieces if p.color == color and type(p) == King][0]
         return True
 
     def update_checks(self):
@@ -70,38 +76,54 @@ class Board:
         for piece in self.pieces:
             if piece.piece_type == PieceType.KING:
                 kings[piece.color] = piece
+
+        self.checks = {Color.WHITE: False, Color.BLACK: False}
         # check if the kings are in check
         for color, king in kings.items():
             if king is not None:
                 opposite_color = Color.WHITE if color == Color.BLACK else Color.BLACK
-                for pos in self.controlled_squares[opposite_color]:
-                    if pos == king.position:
-                        self.checks[color] = True
-                        break
+                for piece in self.pieces:
+                    if piece.color == opposite_color:
+                        if king.position in piece.legal_moves:
+                            # print(f"Check on {king} by {piece}")
+                            self.checks[color] = True
+                            break
                 else:
                     self.checks[color] = False
+        self.checkmates = {Color.WHITE: False, Color.BLACK: False}
 
 
     def updateControlledSquares(self):
         self.controlled_squares = {Color.WHITE: [], Color.BLACK: []}
         for piece in self.pieces:
-            contolled_squares = piece.legal_moves
-            for position in contolled_squares:
+            for position in piece.legal_moves:
                 temp_piece = Piece(
                     color=Color.WHITE if piece.color == Color.BLACK else Color.BLACK,
                     position=position,
                 )
                 original_piece = self.board[position.y][position.x]
-                self.board[position.y][position.x] = temp_piece
+                if original_piece:
+                    self.pieces.remove(original_piece)
+                self.add_piece(temp_piece)
+                for p in self.pieces:
+                    p.update_legal_moves(self)
+                self.update_board()
                 state = piece.move(position, self)
                 if MoveState.CAPTURED in state:
                     self.controlled_squares[piece.color].append(position)
-                self.board[position.y][position.x] = original_piece
+                self.pieces.remove(temp_piece)
+                if original_piece:
+                    self.pieces.append(original_piece)
+                for p in self.pieces:
+                    p.update_legal_moves(self)
+                self.update_board()
+
     def undo_move(self, piece, old_position, backup_piece):
         piece.position = old_position
         piece.moved -= 1
         if backup_piece is not None:
             self.pieces.append(backup_piece)
+
 
     def try_move(self, piece: Piece, new_position: Position, move: bool = True):
         old_position = Position(piece.position.x, piece.position.y)
@@ -109,68 +131,66 @@ class Board:
         piece.moved += 1
         backup_piece = self.board[new_position.y][new_position.x]
 
-        if self.board[new_position.y][new_position.x] is not None:
-            self.pieces.remove(self.board[new_position.y][new_position.x])
-        self.update()
-        if self.checks[piece.color] or not move:
+        if backup_piece:
+            if backup_piece in self.pieces:
+                self.pieces.remove(backup_piece)
+        self.update_board()
+        self.updateControlledSquares()
+        self.update_checks()
+        return_value = True
+        if move: 
+            if self.checks[piece.color]:
+                self.undo_move(piece, old_position, backup_piece)
+                return_value = False
+        else: 
             self.undo_move(piece, old_position, backup_piece)
+            return_value = not self.checks[piece.color]
+        self.update_board()
+        self.updateControlledSquares()
+        self.update_checks()
+        return return_value
 
-        if self.checks[piece.color]:
-            return False
-        return True
 
-    def handle_event(self, event):
-        square_size = self.square_size
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mouse_pos = pygame.mouse.get_pos()
 
-            grid_x = mouse_pos[0] // square_size
-            grid_y = mouse_pos[1] // square_size
-            if self.in_bounds(Position(grid_x, grid_y)):
-                piece = self.board[grid_y][grid_x]
-                if piece is not None and piece.color == self.turn:
-                    self.dragged_piece = piece
-                    self.board[grid_y][grid_x] = None
+    def handle_promotion(self, piece: Piece):
+        if piece.piece_type == PieceType.PAWN: 
+            if (piece.position.y == 0 and piece.color == Color.WHITE) or (piece.position.y == 7 and piece.color == Color.BLACK):
+                self.pieces.remove(piece)
+                self.add_piece(self.promote_to(piece))
+                
+    def print_active_pieces(self):
+        for piece in self.pieces:
+            if piece.moved > 0:
+                print(piece)
 
-        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            if self.dragged_piece is not None:
-                mouse_pos = pygame.mouse.get_pos()
+    def move_piece(self, piece, new_position: Position):               
+        if self.in_bounds(new_position):
+            move_state = piece.move(new_position, self)
+            return_value =  self.handle_castling(piece, new_position)
+            if not return_value:
+                if any(state in move_state for state in LEGAL):
+                    return_value = self.try_move(piece, new_position)
+            #Handle Dragging new piece
+            if MoveState.CREATED in move_state:
+                self.pieces.append(piece)
 
-                grid_x = mouse_pos[0] // square_size
-                grid_y = mouse_pos[1] // square_size
-                new_position = Position(grid_x, grid_y)
-                if self.in_bounds(new_position):
-                    castled = self.handle_castling(self.dragged_piece, new_position)
-                    move_state = self.dragged_piece.move(new_position, self)
+            # Handle promotion
+            self.handle_promotion(piece)
 
-                    if not castled:
-                        if any(state in move_state for state in LEGAL):
-                            if self.try_move(self.dragged_piece, new_position):
-                                
-                                color = (
-                                    Color.WHITE
-                                    if self.dragged_piece.color == Color.BLACK
-                                    else Color.BLACK
-                                )
-                                self.turn = color
-                                self.checkmates[color] = self.checkmate(color)
-                            self.update()
-                    if MoveState.CREATED in move_state:
-                        self.pieces.append(self.dragged_piece)
-
-                    if self.dragged_piece.piece_type == PieceType.PAWN: 
-                        if (self.dragged_piece.position.y == 0 and self.dragged_piece.color == Color.WHITE) or (self.dragged_piece.position.y == 7 and self.dragged_piece.color == Color.BLACK):
-                            self.pieces.remove(self.dragged_piece)
-                            self.add_piece(self.promote_to(self.dragged_piece))
-                            self.update()
-
-                self.dragged_piece = None
-                self.update()
-
+            if return_value:
+                opposite_color = (
+                            Color.WHITE
+                            if piece.color == Color.BLACK
+                            else Color.BLACK
+                        )
+                self.turn = opposite_color
+                self.checkmates[opposite_color] = self.checkmate(opposite_color)
+        return return_value
     def handle_castling(self, king: Piece, new_position: Position):
         # Check if the move is a castling move
         if (
             king.piece_type == PieceType.KING
+            and king.moved == 0
             and abs(king.position.x - new_position.x) == 2
         ):
             # Determine direction of castling (short or long)
@@ -185,7 +205,6 @@ class Board:
                 and rook.piece_type == PieceType.ROOK
                 and rook.moved == 0
             ):
-                print("castling")
                 # Check if squares between king and rook are empty
                 empty_squares = all(
                     self.get(Position(king.position.x + i * direction, king.position.y))
@@ -213,6 +232,29 @@ class Board:
                     )
                     return True
         return False
+    def handle_event(self, event):
+        square_size = self.square_size
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mouse_pos = pygame.mouse.get_pos()
+
+            grid_x = mouse_pos[0] // square_size
+            grid_y = mouse_pos[1] // square_size
+            if self.in_bounds(Position(grid_x, grid_y)):
+                piece = self.board[grid_y][grid_x]
+                if piece is not None and piece.color == self.turn:
+                    self.dragged_piece = piece
+                    self.board[grid_y][grid_x] = None
+
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.dragged_piece is not None:
+                mouse_pos = pygame.mouse.get_pos()
+                grid_x = mouse_pos[0] // square_size
+                grid_y = mouse_pos[1] // square_size
+                new_position = Position(grid_x, grid_y)
+                self.dragged_piece = None
+                self.update()
+
+
 
     @classmethod
     def from_pieces(cls, pieces: List[Piece], dim_x: int, dim_y: int):
@@ -277,14 +319,14 @@ class Board:
         # Draw checkmate indicator with excitement
         if self.checkmates[Color.WHITE]:
             font = pygame.font.Font("freesansbold.ttf", 40)
-            text = font.render("CHECKMATE! White wins!", True, blue)
+            text = font.render("CHECKMATE! Black wins!", True, blue)
             text_rect = text.get_rect(
                 center=(self.dim_x * square_size // 2, self.dim_y * square_size // 2)
             )
             screen.blit(text, text_rect)
         elif self.checkmates[Color.BLACK]:
             font = pygame.font.Font("freesansbold.ttf", 40)
-            text = font.render("CHECKMATE! Black wins!", True, blue)
+            text = font.render("CHECKMATE! White wins!", True, blue)
             text_rect = text.get_rect(
                 center=(self.dim_x * square_size // 2, self.dim_y * square_size // 2)
             )
@@ -300,30 +342,30 @@ class Board:
                         piece.icon, (square_size, square_size)
                     )
                     screen.blit(resized_icon, (x * square_size, y * square_size))
-        # Draw controlled squares with a flashy color
-        for color, positions in self.controlled_squares.items():
-            for position in positions:
-                # Get the count of pieces controlling this square for the current color
-                count = positions.count(position)
-                # Render the count onto the square
-                font = pygame.font.Font("freesansbold.ttf", 30)
-                dir = 1 if color == Color.WHITE else -1
-                letter = "B" if color == Color.BLACK else "W"
-                # Render white count with a neon glow
-                text = font.render(
-                    letter + str(count),
-                    True,
-                    (0, 255, 255) if color == Color.WHITE else (255, 0, 255),
-                )
-                white_text_rect = text.get_rect(
-                    center=(
-                        position.x * square_size
-                        + square_size // 2
-                        + dir * square_size // 4,
-                        position.y * square_size + square_size // 2,
-                    )
-                )
-                screen.blit(text, white_text_rect)
+        # # Draw controlled squares with a flashy color
+        # for color, positions in self.controlled_squares.items():
+        #     for position in positions:
+        #         # Get the count of pieces controlling this square for the current color
+        #         count = positions.count(position)
+        #         # Render the count onto the square
+        #         font = pygame.font.Font("freesansbold.ttf", 30)
+        #         dir = 1 if color == Color.WHITE else -1
+        #         letter = "B" if color == Color.BLACK else "W"
+        #         # Render white count with a neon glow
+        #         text = font.render(
+        #             letter + str(count),
+        #             True,
+        #             (0, 255, 255) if color == Color.WHITE else (255, 0, 255),
+        #         )
+        #         white_text_rect = text.get_rect(
+        #             center=(
+        #                 position.x * square_size
+        #                 + square_size // 2
+        #                 + dir * square_size // 4,
+        #                 position.y * square_size + square_size // 2,
+        #             )
+        #         )
+        #         screen.blit(text, white_text_rect)
 
         # Draw dragged piece at mouse position with a sparkling animation
         if self.dragged_piece is not None:

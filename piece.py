@@ -91,13 +91,14 @@ class Piece:
                     return [MoveState.CAPTURED]
                 else:
                     return [MoveState.OCCUPIED]
-            return [MoveState.MOVED]
+            return [MoveState.CAPTURED, MoveState.MOVED]
         return [MoveState.NOTALLOWED]
 
     def update_legal_moves(self, board: "Board"):
         pass
 
     def move(self, new_position, board: "Board"):
+
         if self.created == False:
             self.position = new_position
             self.created = True
@@ -113,17 +114,18 @@ class Pawn(Piece):
     piece_type: PieceType = PieceType.PAWN
 
     def _is_legal_move(self, new_position, board: "Board"):
-        if board.get(new_position) is not None:
+        if new_position in self.legal_moves:
+
+            if board.get(new_position) is not None:
                 direction = -1 if self.color == Color.WHITE else 1
                 if (
                     board.get(new_position).color != self.color
                     and abs(new_position.x - self.position.x) == 1
                     and  new_position.y - self.position.y == direction
                 ):
-                    return [MoveState.CAPTURED]
-
-        if new_position in self.legal_moves:
-
+                    return [MoveState.CAPTURED, MoveState.MOVED]
+                else:
+                    return [MoveState.NOTALLOWED]
             return [MoveState.MOVED]
         return [MoveState.NOTALLOWED]
 
@@ -141,9 +143,12 @@ class Pawn(Piece):
             ):
                 moves.append(Position(self.position.x, self.position.y + 2 * direction))
         if board.get(Position(self.position.x + 1, self.position.y + direction)):
-            moves.append(Position(self.position.x + 1, self.position.y + direction))
+            if board.get(Position(self.position.x + 1, self.position.y + direction)).color != self.color:
+                moves.append(Position(self.position.x + 1, self.position.y + direction))
         if board.get(Position(self.position.x - 1, self.position.y + direction)):
-            moves.append(Position(self.position.x - 1, self.position.y + direction))
+            if board.get(Position(self.position.x - 1, self.position.y + direction)).color != self.color:
+
+                moves.append(Position(self.position.x - 1, self.position.y + direction))
         self.legal_moves = moves
 
 
