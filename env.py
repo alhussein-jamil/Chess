@@ -3,7 +3,7 @@ from gymnasium import spaces
 import numpy as np
 import pygame
 from typing import Tuple
-from board import Board
+from board import Board, Ending
 from piece import Bishop, Color, King, Knight, Pawn, Position, Queen, Rook, LEGAL, MoveState, PieceType
 piece_to_index = {
     None: 0,
@@ -15,7 +15,7 @@ piece_to_index = {
     Pawn: 6
 }
 class ChessEnv(gym.Env):
-    metadata = {'render.modes': ['human']}
+    metadata = {'render.modes': ['human', 'rgb_array']}
     def __init__(self, dim_x: int, dim_y: int, render_mode: str = 'human'):
         super(ChessEnv, self).__init__()
         self.board = Board(dim_x, dim_y)
@@ -24,6 +24,9 @@ class ChessEnv(gym.Env):
             pygame.init()
             pygame.display.set_caption("Chess Game")
             self.screen = pygame.display.set_mode((dim_x * self.square_size+100, dim_y * self.square_size+100))
+        else: 
+            ...
+        self.render_mode = render_mode
 
         self.observation_space = spaces.Box(low=0, high=1, shape=(dim_x, dim_y, 7), dtype=np.uint8)  # Assuming 6 channels for each piece
         self.populate_board()
@@ -35,8 +38,8 @@ class ChessEnv(gym.Env):
         for piece in self.board.pieces:
             if piece.color == Color.WHITE:
                 n_pieces += 1
-        self.action_space = spaces.Tuple((spaces.Box(low=0, high=1, shape=(n_pieces, 64), dtype=np.float32), spaces.Discrete(4), spaces.Discrete(3))) # the first part of the action space is the probability of choosing a piece and the second part is the promotion type, the third being castling direction
-
+        # self.action_space = spaces.Tuple((spaces.Box(low=0, high=1, shape=(n_pieces, 64), dtype=np.float32), spaces.Discrete(4), spaces.Discrete(3))) # the first part of the action space is the probability of choosing a piece and the second part is the promotion type, the third being castling direction
+        self.action_space = spaces.Box(low=0, high=1, shape=(3 + 4 + n_pieces*64,), dtype=np.float32) #flatten the action space
     def get_observation(self):
         observation = np.zeros((self.board.dim_x, self.board.dim_y, 7), dtype=np.uint8)
         for piece in self.board.pieces:
@@ -84,11 +87,9 @@ class ChessEnv(gym.Env):
         self.board.update()
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
-        castling_dir = action[2]
-        try: 
-            king = [p for p in self.board.pieces if p.color == self.board.turn and type(p) == King][0]
-        except:
-            breakpoint()
+        castling_dir = np.argmax(action[:3])
+        king = [p for p in self.board.pieces if p.color == self.board.turn and type(p) == King][0]
+
         castled = False
         if castling_dir == 1: #king side castle
             if self.board.turn == Color.WHITE:
@@ -101,65 +102,51 @@ class ChessEnv(gym.Env):
             else:
                 castled = self.board.handle_castling(king, new_position=Position(2, 0))
 
-        self.board.promotion = PieceType(action[1] + 2)
-        action = action[0]
+        self.board.promotion = PieceType(2 + np.argmax(action[3:7]))
+        action = action[7:].reshape(-1, 64)
         # Reset the reward to zero
         reward = 0
         # Boolean flag to indicate whether the episode is done
         done = False
+        current_color = self.board.turn
         if not castled:
-                
-            if self.board.turn == Color.WHITE:
-                # Iterate over each piece and its corresponding action probabilities
-                white_pieces = [p for p in self.board.pieces if p.color==Color.WHITE]
-                proba_sum = np.sum(action, axis=1)
-                moved = False
-                #sort white pieces by the action probabilities
-                sorted_white_pieces = [x for _,x in sorted(zip(proba_sum, white_pieces), key=lambda pair: pair[0])]
-                for i,piece in enumerate(sorted_white_pieces):
-                    # Choose the move with the highest probability
-                    moves = np.argsort(action[i])[::-1]
-                    for move in moves:
-                        if move < len(piece.legal_moves):
-                            if self.board.move_piece(piece, piece.legal_moves[move]):
-                                moved = True
-                                break
-                    if moved:
-                        break
-            else:
-                # Implement black's move (for example, random move)
-                black_pieces = [p for p in self.board.pieces if p.color==Color.BLACK and p.legal_moves]
-                moved = False
-                for i in range(len(black_pieces)):
-
-                    random_piece = black_pieces[np.random.randint(0, len(black_pieces))]
-                    for move in random_piece.legal_moves:
-                        if len(random_piece.legal_moves) > 0:
-                            random_move = random_piece.legal_moves[np.random.randint(0,len(random_piece.legal_moves))]
-                            if self.board.move_piece(random_piece, random_move):
-                                moved = True
-                            else: 
-                                try:
-                                    random_piece.legal_moves.remove(random_move)
-                                except:
-                                    pass
-                            if moved:
-                                break
-                    if moved: 
-                        break
-                    else: 
-                        black_pieces.remove(random_piece)
-
-        done = self.board.checkmates[Color.WHITE] or self.board.checkmates[Color.BLACK]
-
+            # Iterate over each piece and its corresponding action probabilities
+            current_pieces = [p for p in self.board.pieces if p.color==self.board.turn]
+            proba_sum = np.sum(action, axis=1)
+            moved = False
+            #sort white pieces by the action probabilities
+            sorted_white_pieces = [x for _,x in sorted(zip(proba_sum, current_pieces), key=lambda pair: pair[0])]
+            for i,piece in enumerate(sorted_white_pieces):
+                # Choose the move with the highest probability
+                moves = np.argsort(action[i])[::-1]
+                for move in moves:
+                    if move < len(piece.legal_moves):
+                        return_value, capture_value = self.board.move_piece(piece, piece.legal_moves[move])
+                        if return_value:
+                            reward += capture_value / 10.0
+                            reward -= 0.01
+                            moved = True
+                            break
+                if moved:
+                    break
+        done = self.board.checkmates[Color.WHITE] != Ending.ONGOING or self.board.checkmates[Color.BLACK] != Ending.ONGOING
+        if done:
+            if self.board.checkmates[current_color] == Ending.CHECKMATE:
+                reward -= 2
+            elif self.board.checkmates[self.board.turn] == Ending.CHECKMATE:
+                reward += 2
+            elif self.board.checkmates[current_color] in [Ending.STALEMATE, Ending.DRAW]:
+                reward += 1
+            elif self.board.checkmates[self.board.turn] in [Ending.STALEMATE, Ending.DRAW]:
+                reward += 1
         # Return the new observation, reward, done flag, and additional info (empty for now)
-        return self.get_observation(), reward, done, {}
+        return self.get_observation(), reward, done, False, {}
 
-    def reset(self):
+    def reset(self, **kwargs):
         # Reset the board to the initial state
         self.board = Board(self.board.dim_x, self.board.dim_y)
         self.populate_board()
-        return self.get_observation()
+        return self.get_observation(), {}
 
     def render(self, mode='human'):
             self.board.draw(self.screen, self.square_size)

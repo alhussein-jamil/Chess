@@ -69,7 +69,7 @@ class Piece:
     moved: int = 0
     created: bool = False
     legal_moves: List = dc.field(default_factory=list)
-
+    
     def __post_init__(self):
         try:
             self.icon = pygame.image.load(
@@ -112,7 +112,7 @@ class Piece:
 @dc.dataclass
 class Pawn(Piece):
     piece_type: PieceType = PieceType.PAWN
-
+    value: int = 1
     def _is_legal_move(self, new_position, board: "Board"):
         if new_position in self.legal_moves:
 
@@ -155,7 +155,7 @@ class Pawn(Piece):
 @dc.dataclass
 class Rook(Piece):
     piece_type: PieceType = PieceType.ROOK
-
+    value: int = 5
     def update_legal_moves(self, board: "Board"):
         moves = []
         for i in range(1, 8):
@@ -208,7 +208,7 @@ class Rook(Piece):
 @dc.dataclass
 class Bishop(Piece):
     piece_type: PieceType = PieceType.BISHOP
-
+    value: int = 3
     def update_legal_moves(self, board: "Board"):
         moves = []
         for i in range(1, 8):
@@ -281,7 +281,7 @@ class Bishop(Piece):
 @dc.dataclass
 class Knight(Piece):
     piece_type: PieceType = PieceType.KNIGHT
-
+    value: int = 3
     def update_legal_moves(self, board: "Board"):
         moves = []
         for dx, dy in [
@@ -309,7 +309,7 @@ class Knight(Piece):
 @dc.dataclass
 class Queen(Piece):
     piece_type: PieceType = PieceType.QUEEN
-
+    value: int = 9
     def update_legal_moves(self, board: "Board"):
         moves = []
         for i in range(1, 8):
@@ -426,7 +426,7 @@ class Queen(Piece):
 @dc.dataclass
 class King(Piece):
     piece_type: PieceType = PieceType.KING
-
+    value: int = 100
     def update_legal_moves(self, board: "Board"):
         moves = []
         for dx, dy in [
