@@ -15,7 +15,7 @@ piece_to_index = {
     Pawn: 6
 }
 class ChessEnv(gym.Env):
-    metadata = {'render.modes': ['human', 'rgb_array']}
+    metadata = {'render_modes': ['human', 'rgb_array']}
     def __init__(self, dim_x: int, dim_y: int, render_mode: str = 'human'):
         super(ChessEnv, self).__init__()
         self.board = Board(dim_x, dim_y)
@@ -23,12 +23,12 @@ class ChessEnv(gym.Env):
         if render_mode == 'human':
             pygame.init()
             pygame.display.set_caption("Chess Game")
-            self.screen = pygame.display.set_mode((dim_x * self.square_size+100, dim_y * self.square_size+100))
+            self.screen = pygame.display.set_mode((dim_x * self.square_size+50, dim_y * self.square_size+50))
         else: 
             ...
         self.render_mode = render_mode
 
-        self.observation_space = spaces.Box(low=0, high=1, shape=(dim_x, dim_y, 7), dtype=np.uint8)  # Assuming 6 channels for each piece
+        self.observation_space = spaces.Box(low=0, high=2, shape=(dim_x, dim_y, 7), dtype=np.uint8)  # Assuming 6 channels for each piece
         self.populate_board()
         # The action space has at most 16 piece to be picked and 64 squares to move to but sometimes squares are not legal
         # However, our implementation of the game allows access to legal moves for each piece
@@ -40,10 +40,11 @@ class ChessEnv(gym.Env):
                 n_pieces += 1
         # self.action_space = spaces.Tuple((spaces.Box(low=0, high=1, shape=(n_pieces, 64), dtype=np.float32), spaces.Discrete(4), spaces.Discrete(3))) # the first part of the action space is the probability of choosing a piece and the second part is the promotion type, the third being castling direction
         self.action_space = spaces.Box(low=0, high=1, shape=(3 + 4 + n_pieces*64,), dtype=np.float32) #flatten the action space
+
     def get_observation(self):
         observation = np.zeros((self.board.dim_x, self.board.dim_y, 7), dtype=np.uint8)
         for piece in self.board.pieces:
-            observation[piece.position.y][piece.position.x][piece_to_index[type(piece)]] = 1
+            observation[piece.position.y][piece.position.x][piece_to_index[type(piece)]] = 1 if piece.color == Color.WHITE else 2
         return observation
 
     def populate_board(self):
@@ -154,3 +155,11 @@ class ChessEnv(gym.Env):
 
     def close(self):
         pygame.quit()
+
+#register the environment
+gym.register(
+    id='Chess-v0',
+    entry_point='env:ChessEnv',
+    max_episode_steps=1000,
+    reward_threshold=1.0,
+)
