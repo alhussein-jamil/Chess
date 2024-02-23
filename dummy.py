@@ -17,4 +17,9 @@ while not exit:
     if not done:
         action = game.action_space.sample()
         _, _, done,_,_ = game.step(action) 
-        time.sleep(0.1)
+    else:
+        #wait for space bar to be pressed
+        done = False
+        game.reset()    
+
+

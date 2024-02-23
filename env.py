@@ -137,9 +137,9 @@ class ChessEnv(gym.Env):
             elif self.board.checkmates[self.board.turn] == Ending.CHECKMATE:
                 reward += 2
             elif self.board.checkmates[current_color] in [Ending.STALEMATE, Ending.DRAW]:
-                reward += 1
+                reward += 0
             elif self.board.checkmates[self.board.turn] in [Ending.STALEMATE, Ending.DRAW]:
-                reward += 1
+                reward += 0
         # Return the new observation, reward, done flag, and additional info (empty for now)
         return self.get_observation(), reward, done, False, {}
 

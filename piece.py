@@ -1,7 +1,10 @@
 import dataclasses as dc
 from enum import Enum
 from pathlib import Path
-from typing import List
+from typing import List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from board import Board
 
 import pygame
 
@@ -105,6 +108,10 @@ class Piece:
             return [MoveState.CREATED]
 
         legality = self._is_legal_move(new_position, board)
+
+        if isinstance(board.board[new_position.y][new_position.x], King):
+            legality = [MoveState.NOTALLOWED]
+        
 
         return legality
 
