@@ -1,7 +1,7 @@
 import dataclasses as dc
 from enum import Enum
 from pathlib import Path
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from board import Board
@@ -72,7 +72,7 @@ class Piece:
     moved: int = 0
     created: bool = False
     legal_moves: List = dc.field(default_factory=list)
-    
+
     def __post_init__(self):
         try:
             self.icon = pygame.image.load(
@@ -111,7 +111,6 @@ class Piece:
 
         if isinstance(board.board[new_position.y][new_position.x], King):
             legality = [MoveState.NOTALLOWED]
-        
 
         return legality
 
@@ -120,6 +119,7 @@ class Piece:
 class Pawn(Piece):
     piece_type: PieceType = PieceType.PAWN
     value: int = 1
+
     def _is_legal_move(self, new_position, board: "Board"):
         if new_position in self.legal_moves:
 
@@ -128,7 +128,7 @@ class Pawn(Piece):
                 if (
                     board.get(new_position).color != self.color
                     and abs(new_position.x - self.position.x) == 1
-                    and  new_position.y - self.position.y == direction
+                    and new_position.y - self.position.y == direction
                 ):
                     return [MoveState.CAPTURED, MoveState.MOVED]
                 else:
@@ -150,10 +150,20 @@ class Pawn(Piece):
             ):
                 moves.append(Position(self.position.x, self.position.y + 2 * direction))
         if board.get(Position(self.position.x + 1, self.position.y + direction)):
-            if board.get(Position(self.position.x + 1, self.position.y + direction)).color != self.color:
+            if (
+                board.get(
+                    Position(self.position.x + 1, self.position.y + direction)
+                ).color
+                != self.color
+            ):
                 moves.append(Position(self.position.x + 1, self.position.y + direction))
         if board.get(Position(self.position.x - 1, self.position.y + direction)):
-            if board.get(Position(self.position.x - 1, self.position.y + direction)).color != self.color:
+            if (
+                board.get(
+                    Position(self.position.x - 1, self.position.y + direction)
+                ).color
+                != self.color
+            ):
 
                 moves.append(Position(self.position.x - 1, self.position.y + direction))
         self.legal_moves = moves
@@ -163,6 +173,7 @@ class Pawn(Piece):
 class Rook(Piece):
     piece_type: PieceType = PieceType.ROOK
     value: int = 5
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         for i in range(1, 8):
@@ -216,6 +227,7 @@ class Rook(Piece):
 class Bishop(Piece):
     piece_type: PieceType = PieceType.BISHOP
     value: int = 3
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         for i in range(1, 8):
@@ -289,6 +301,7 @@ class Bishop(Piece):
 class Knight(Piece):
     piece_type: PieceType = PieceType.KNIGHT
     value: int = 3
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         for dx, dy in [
@@ -317,6 +330,7 @@ class Knight(Piece):
 class Queen(Piece):
     piece_type: PieceType = PieceType.QUEEN
     value: int = 9
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         for i in range(1, 8):
@@ -434,6 +448,7 @@ class Queen(Piece):
 class King(Piece):
     piece_type: PieceType = PieceType.KING
     value: int = 100
+
     def update_legal_moves(self, board: "Board"):
         moves = []
         for dx, dy in [

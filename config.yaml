@@ -1,6 +1,11 @@
 training: 
+
+  run: 
+    multi_agent: true
+    clean_run: true
+    fps: 2
   environment:
-    env: ChessMulti-v0
+    env: ??? 
     clip_actions: true
     normalize_actions: true
     disable_env_checking: true
@@ -8,15 +13,13 @@ training:
       render_mode: rgb_array
       dim_x: 8
       dim_y: 8
+      init_display: false
     render_env: false
-
   rollouts: 
     num_rollout_workers: 20
-    num_envs_per_worker: 20
+    num_envs_per_worker: 1
     rollout_fragment_length: auto
-    batch_mode: truncate_episodes
     observation_filter: MeanStdFilter
-
 
   debugging: 
     logger_creator: ???
@@ -24,22 +27,30 @@ training:
 
 
   training:
-    gamma: 0.99
-    train_batch_size: 1024
+    gamma: 0.80
+    lr: 0.00001
+    train_batch_size: 4096
     model:
-      fcnet_hiddens: [256, 256,256,64]
-      fcnet_activation: elu
+      fcnet_hiddens: [2048, 1024, 512, 256]
+      # fcnet_activation: elu
+      # free_log_std: true
+      vf_share_layers: false
+      use_attention: true
+
+
+      
     optimizer:
       type: adam
+
         
     use_critic: true
     use_gae: true
     lambda_: 0.92
     kl_coeff: 0.2
 
-    sgd_minibatch_size: 64
+    sgd_minibatch_size: 512 
 
-    num_sgd_iter: 16
+    num_sgd_iter: 8
 
     shuffle_sequences: true
 
@@ -47,19 +58,25 @@ training:
 
     entropy_coeff: 0.001
 
-    clip_param: 0.2
+    clip_param: 0.3
 
-    kl_target: 0.01
-
+    # kl_target: 0.01
     
-    
-    vf_clip_param: 1000.0
+    # vf_clip_param: 1000.0
 
   framework:
     framework: torch
-    eager_tracing: false
+    # eager_tracing: true
 
   resources:
     num_gpus: 1
     num_cpus_per_worker: 1
     num_gpus_per_worker: 0
+
+  # evaluation:
+  #   evaluation_interval: 1
+  #   evaluation_duration: 10
+  #   evaluation_num_workers: 1
+  #   evaluation_config: 
+  #     render_env: true
+  #     deterministic: true

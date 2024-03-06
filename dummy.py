@@ -1,25 +1,24 @@
-from env import ChessEnv
-import pygame
 import time
-game = ChessEnv(8,8,"human")
-game.reset()
+
+import pygame
+
+from mono_agent_env import ChessEnvMono
+from multi_agent_env import ChessEnvMulti
+
+env = ChessEnvMono(render_mode="human")
+env.reset()
+env.render()
 done = False
-exit = False 
-
-
-while not exit: 
+game_quit = False
+while not game_quit:
+    if done:
+        env.reset()
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            exit = True
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            game.reset()
-    game.render()
-    if not done:
-        action = game.action_space.sample()
-        _, _, done,_,_ = game.step(action) 
-    else:
-        #wait for space bar to be pressed
-        done = False
-        game.reset()    
-
-
+            game_quit = True
+    action = env.action_space.sample()
+    obs, rewards, dones, _, _ = env.step(action)
+    if isinstance(dones, dict):
+        done = dones["__all__"]
+    env.render()
+    time.sleep(0.1)
