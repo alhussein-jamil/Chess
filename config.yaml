@@ -19,7 +19,7 @@ training:
     num_rollout_workers: 20
     num_envs_per_worker: 1
     rollout_fragment_length: auto
-    observation_filter: MeanStdFilter
+    # observation_filter: MeanStdFilter
 
   debugging: 
     logger_creator: ???
