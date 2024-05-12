@@ -24,7 +24,8 @@ class MinMaxAgent:
         Returns:
             Any: The possible moves.
         """
-        ...
+        board.update()
+        
 
     @staticmethod
     def evaluate(board: Board):  # Reward function
