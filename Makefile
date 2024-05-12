@@ -1,9 +1,17 @@
-.PHONY: tensorboard format install
+.PHONY: tensorboard format install train play help
 PYTHON := python3.10
 
 ## Install dependencies
 install:
 	@python -m pip install -r requirements.txt
+
+## Run the training script
+train:
+	@$(PYTHON) train.py
+
+## Run the play script
+play:
+	@$(PYTHON) play.py
 
 ## Tensorboard
 tensorboard:

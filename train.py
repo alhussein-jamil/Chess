@@ -278,11 +278,14 @@ def main():
 
         result = algo.train()
 
-        # Assuming 'result' contains a 'loss' you want to display
-        infos = {
-            color: {k:float(v) for k,v in result["info"]["learner"][color]["learner_stats"].items()}
-            for color in ["White", "Black"]
-        }
+        try:    
+            # Assuming 'result' contains a 'loss' you want to display
+            infos = {
+                color: {k:float(v) for k,v in result["info"]["learner"][color]["learner_stats"].items()}
+                for color in ["White", "Black"]
+            }
+        except:
+            infos = {}
         # Use the 'progress_bar' object to set description
         print(f"Epoch {epoch}") 
         print(f"Stats: \n{yaml.dump(infos, allow_unicode=True)}")
