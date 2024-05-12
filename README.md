@@ -17,6 +17,9 @@ Dive into the world of AI with our reinforcement learning environments, designed
 
 ## Reinforcement Learning Agent Training: 
 Train your own AI agent using the powerful Proximal Policy Optimization (PPO) algorithm from ray.rllib. Watch as your agent learns and evolves to master the game of chess.
+<center>
+<img src="./assets/tensorboard.png" alt="menu" width="500">
+</center>
 
 ## Minimax Algorithm Implementation: 
 Explore advanced gameplay strategies with our implementation of the minimax algorithm enhanced with alpha-beta pruning. Witness the AI make calculated moves to outmaneuver opponents on the chessboard.
