@@ -6,8 +6,9 @@ import pygame
 from gymnasium import spaces
 from pygame import surfarray
 
-from base import BaseChessEnv
-from piece import Bishop, Color, King, Knight, Pawn, Queen, Rook
+from src.env.rl.base import BaseChessEnv
+from ..base.piece import Bishop, Color, King, Knight, Pawn, Queen, Rook
+from ray.tune.registry import register_env
 
 piece_to_index = {None: 0, Rook: 1, Knight: 2, Bishop: 3, Queen: 4, King: 5, Pawn: 6}
 
@@ -30,20 +31,14 @@ def pg_to_cv2(cvarray: np.ndarray) -> np.ndarray:
 class ChessEnvMono(BaseChessEnv):
     def __init__(
         self,
-        dim_x: int = 8,
-        dim_y: int = 8,
         render_mode: str = "rgb_array",
-        square_size: int = 64,
         reward_cfg: Dict[str, float] = DEFAULT_REWARD_CONFIG,
         init_display=True,
+        **kwargs,
     ):
-
         BaseChessEnv.__init__(
             self,
-            dim_x=dim_x,
-            dim_y=dim_y,
             render_mode=render_mode,
-            square_size=square_size,
             reward_cfg=reward_cfg,
             init_display=init_display,
         )
@@ -56,9 +51,8 @@ class ChessEnvMono(BaseChessEnv):
         )
 
     def step(
-        self, action_tuple
-    ) -> Tuple[Dict[Any, Any], Dict[Any, Any], Dict[Any, Any], Dict[Any, Any]]:
-
+        self, action_tuple: np.ndarray
+    ) -> Tuple[np.ndarray, float, bool, bool, Dict[Any, Any]]:
         action_tuple = action_tuple.reshape(2, -1)
         action_white = action_tuple[0]
         action_black = action_tuple[1]
@@ -72,23 +66,21 @@ class ChessEnvMono(BaseChessEnv):
 
         return obs, reward, done, truncated, info
 
-    def reset(
-        self, *, seed=None, options=None
-    ) -> Tuple[Dict[Any, Any], Dict[Any, Any]]:
+    def reset(self, *, seed=None, options=None) -> Tuple[np.ndarray, Dict[Any, Any]]:
         self._reset(seed=seed, options=options)
         return self._get_observation(), {}
 
     def render(self, mode=None):
         if mode is None:
             mode = self.render_mode
-        self.board.draw(self.screen, self.square_size)
+        self.board.draw(self.screen)
         pygame.display.flip()
         if mode == "rgb_array":
             try:
                 pg_frame = surfarray.pixels3d(
                     self.screen
                 )  # convert the surface to a np array. Only works with depth 24 or 32, not less
-            except:
+            except Exception:
                 pg_frame = surfarray.array3d(
                     self.screen
                 )  # convert the surface to a np array. Works with any depth
@@ -101,3 +93,6 @@ class ChessEnvMono(BaseChessEnv):
 
     def close(self):
         pygame.quit()
+
+
+register_env("ChessMonoAgent-v0", lambda config: ChessEnvMono(**config))

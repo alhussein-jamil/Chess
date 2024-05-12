@@ -2,13 +2,12 @@ training:
 
   run: 
     multi_agent: true
-    clean_run: true
+    clean_run: false
     fps: 2
   environment:
     env: ??? 
     clip_actions: true
     normalize_actions: true
-    disable_env_checking: true
     env_config: 
       render_mode: rgb_array
       dim_x: 8
@@ -17,9 +16,9 @@ training:
     render_env: false
   rollouts: 
     num_rollout_workers: 20
-    num_envs_per_worker: 1
+    num_envs_per_worker: 8 
     rollout_fragment_length: auto
-    # observation_filter: MeanStdFilter
+    observation_filter: MeanStdFilter
 
   debugging: 
     logger_creator: ???
@@ -27,18 +26,35 @@ training:
 
 
   training:
-    gamma: 0.80
-    lr: 0.00001
     train_batch_size: 4096
     model:
-      fcnet_hiddens: [2048, 1024, 512, 256]
-      # fcnet_activation: elu
-      # free_log_std: true
+      fcnet_hiddens: [  2048, 1024, 512 ]
+      free_log_std: true
       vf_share_layers: false
-      use_attention: true
+      # use_attention: true
+      # The number of transformer units within GTrXL.
+      # A transformer unit in GTrXL consists of a) MultiHeadAttention module and
+      # b) a position-wise MLP.
+      # attention_num_transformer_units: 16
+      # The input and output size of each transformer unit.
+      # attention_dim: 10
+      # # The number of attention heads within the MultiHeadAttention units.
+      # attention_num_heads: 4
+      # # The dim of a single head (within the MultiHeadAttention units).
+      # attention_head_dim: 4
+      # # The memory sizes for inference and training.  is the number of timesteps to concat (time axis) and feed into the next transformer unit as inference input. The first transformer unit of your policy will receive this number of past observations (plus the current one), instead.
+      # attention_memory_inference: 10
+      # attention_memory_training: 10
+      # # The output dim of the position-wise MLP.
+      # attention_position_wise_mlp_dim: 64
+      # # The initial bias values for the 2 GRU gates within a transformer unit.
+      # attention_init_gru_gate_bias: 2.0
+      # Whether to feed a_{t-n:t-1} to GTrXL (one-hot encoded if discrete).
+      # attention_use_n_prev_actions: 3
+      # # Whether to feed r_{t-n:t-1} to GTrXL.
+      # attention_use_n_prev_rewards: 1
 
-
-      
+          
     optimizer:
       type: adam
 
@@ -50,7 +66,7 @@ training:
 
     sgd_minibatch_size: 512 
 
-    num_sgd_iter: 8
+    num_sgd_iter: 5
 
     shuffle_sequences: true
 
@@ -60,9 +76,9 @@ training:
 
     clip_param: 0.3
 
-    # kl_target: 0.01
+    kl_target: 0.01
     
-    # vf_clip_param: 1000.0
+    vf_clip_param: 1000.0
 
   framework:
     framework: torch

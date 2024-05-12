@@ -2,4 +2,6 @@
 ray_checkpoints/
 test_dir/
 ray_logs/
+ray_evals/
+*.pyc
 __pycache__/

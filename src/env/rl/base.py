@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Dict, Tuple
 
 import cv2
 import gymnasium
@@ -6,20 +6,43 @@ import numpy as np
 import pygame
 from gymnasium import spaces
 from pygame import surfarray
+from copy import deepcopy
 
-from board import Board, Ending
-from piece import (Bishop, Color, King, Knight, Pawn, PieceType, Position,
-                   Queen, Rook)
 
-piece_to_index = {None: 0, Rook: 1, Knight: 2, Bishop: 3, Queen: 4, King: 5, Pawn: 6}
+from ..base.board import Board, Ending
+from ..base.piece import (
+    Bishop,
+    Color,
+    King,
+    Knight,
+    Pawn,
+    PieceType,
+    Position,
+    NullPiece,
+    Piece,
+    Queen,
+    Rook,
+    STARTING_PIECES,
+)
+from ...globals import DIM_X as dim_x, DIM_Y as dim_y, SQUARE_SIZE as square_size
 
+piece_to_index: Dict[type[Piece], int] = {
+    NullPiece: 0,
+    Pawn: 1,
+    Rook: 2,
+    Knight: 3,
+    Bishop: 4,
+    Queen: 5,
+    King: 6,
+}
+index_to_piece = {v: k for k, v in piece_to_index.items()}
 color_name_map = {Color.WHITE: "White", Color.BLACK: "Black"}
 
 DEFAULT_REWARD_CONFIG = {
-    "move": 0.002,
-    "capture": 0.005,
-    "checkmate": 3,
-    "draw": -3,
+    "move": 0.005,
+    "capture": 0.05,
+    "checkmate": 30,
+    "draw": -15,
 }
 
 
@@ -34,10 +57,7 @@ class BaseChessEnv(gymnasium.Env):
 
     def __init__(
         self,
-        dim_x: int = 8,
-        dim_y: int = 8,
         render_mode: str = "rgb_array",
-        square_size: int = 64,
         reward_cfg: Dict[str, float] = DEFAULT_REWARD_CONFIG,
         init_display=True,
     ):
@@ -52,74 +72,40 @@ class BaseChessEnv(gymnasium.Env):
                 (dim_x * square_size + 50, dim_y * square_size + 50)
             )
 
-        self.board = Board(dim_x, dim_y)
+        self.board = Board()
         self.square_size = 64  # Assuming square size of 64 pixels
         self.render_mode = render_mode
         self.n_squares = dim_x * dim_y
         self.observation_space = spaces.Box(
-            low=0, high=1, shape=(dim_x * dim_y * 14,), dtype=np.uint8
+            low=0, high=32, shape=(dim_x * dim_y * 3,), dtype=np.uint8
         )
+
         self.turn = Color.WHITE
         self.populate_board()
 
-    def _get_observation(self):
-        observation = np.zeros((self.board.dim_x, self.board.dim_y, 14), dtype=np.uint8)
+    def _get_observation(self) -> np.ndarray:
+        observation = np.zeros((dim_x, dim_y, 3), dtype=np.uint8)
 
-        for piece in self.board.pieces:
-            value = piece_to_index[type(piece)] + (
-                7 if piece.color == Color.WHITE else 0
-            )
-            observation[piece.position.y][piece.position.x][value] = 1
+        for piece in self.board.pieces[Color.WHITE] + self.board.pieces[Color.BLACK]:
+            value = piece_to_index[type(piece)]
+            observation[piece.position.y][piece.position.x][
+                0 if piece.color == Color.WHITE else 1
+            ] = value
+        for position, danger in self.board.danger_level.items():
+            assert abs(danger) <= 16
+            observation[position.y][position.x][2] = danger + 16
+
         return observation.reshape(-1)
 
     def populate_board(self):
-        STARTINGCONFIGURATION = [
-            Rook(color=Color.BLACK, position=Position(0, 0)),
-            Knight(color=Color.BLACK, position=Position(1, 0)),
-            Bishop(color=Color.BLACK, position=Position(2, 0)),
-            Queen(color=Color.BLACK, position=Position(3, 0)),
-            King(color=Color.BLACK, position=Position(4, 0)),
-            Bishop(color=Color.BLACK, position=Position(5, 0)),
-            Knight(color=Color.BLACK, position=Position(6, 0)),
-            Rook(color=Color.BLACK, position=Position(7, 0)),
-            Pawn(color=Color.BLACK, position=Position(0, 1)),
-            Pawn(color=Color.BLACK, position=Position(1, 1)),
-            Pawn(color=Color.BLACK, position=Position(2, 1)),
-            Pawn(color=Color.BLACK, position=Position(3, 1)),
-            Pawn(color=Color.BLACK, position=Position(4, 1)),
-            Pawn(color=Color.BLACK, position=Position(5, 1)),
-            Pawn(color=Color.BLACK, position=Position(6, 1)),
-            Pawn(color=Color.BLACK, position=Position(7, 1)),
-            Rook(color=Color.WHITE, position=Position(0, 7)),
-            Knight(color=Color.WHITE, position=Position(1, 7)),
-            Bishop(color=Color.WHITE, position=Position(2, 7)),
-            Queen(color=Color.WHITE, position=Position(3, 7)),
-            King(color=Color.WHITE, position=Position(4, 7)),
-            Bishop(color=Color.WHITE, position=Position(5, 7)),
-            Knight(color=Color.WHITE, position=Position(6, 7)),
-            Rook(color=Color.WHITE, position=Position(7, 7)),
-            Pawn(color=Color.WHITE, position=Position(0, 6)),
-            Pawn(color=Color.WHITE, position=Position(1, 6)),
-            Pawn(color=Color.WHITE, position=Position(2, 6)),
-            Pawn(color=Color.WHITE, position=Position(3, 6)),
-            Pawn(color=Color.WHITE, position=Position(4, 6)),
-            Pawn(color=Color.WHITE, position=Position(5, 6)),
-            Pawn(color=Color.WHITE, position=Position(6, 6)),
-            Pawn(color=Color.WHITE, position=Position(7, 6)),
-        ]
-
-        for piece in STARTINGCONFIGURATION:
-            self.board.add_piece(piece)
+        for piece in STARTING_PIECES:
+            self.board.add_piece(self.board, deepcopy(piece))
         self.board.update()
 
-    def _step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
+    def _step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, dict]:
         reward = 0
         castling_dir = np.argmax(action[:3])
-        king = [
-            p
-            for p in self.board.pieces
-            if p.color == self.board.turn and type(p) == King
-        ][0]
+        king = [p for p in self.board.pieces[self.board.turn] if type(p) == King][0]
 
         castled = False
         if castling_dir == 1:  # king side castle
@@ -137,9 +123,8 @@ class BaseChessEnv(gymnasium.Env):
 
         action = action[7:].reshape(-1, 64)
         if not castled:
-            # # Iterate over each piece and its corresponding action probabilities
-            pieces = self.board.pieces
-            pieces = [p for p in pieces if p.color == self.board.turn]
+            # Iterate over each piece and its corresponding action probabilities
+            pieces: list[Piece] = self.board.pieces[self.board.turn]
             sorted_idx = np.argsort(action.sum(axis=1))[::-1]
             moved = False
             for idx in sorted_idx:
@@ -147,21 +132,30 @@ class BaseChessEnv(gymnasium.Env):
                     continue
                 piece = pieces[idx]
                 a = action[idx]
-                if piece is None or piece.color != self.board.turn:
+                if isinstance(Piece, NullPiece) or piece.color != self.board.turn:
                     continue
 
                 # Choose the move with the highest probability
                 moves = np.argsort(a)[::-1]
                 for move in moves:
                     if move < len(piece.legal_moves):
+                        occupying_piece = self.board.board[piece.legal_moves[move]]
                         return_value, capture_value = self.board.move_piece(
                             piece, piece.legal_moves[move]
                         )
                         if return_value:
-                            reward += capture_value * self.reward_cfg["capture"]
+                            capture_reward = capture_value * self.reward_cfg["capture"]
+                            if not isinstance(occupying_piece, NullPiece):
+                                capture_reward *= (
+                                    len(occupying_piece.legal_moves)
+                                    / occupying_piece.max_n_legal_moves
+                                )
+
+                            reward += capture_reward
                             reward -= self.reward_cfg["move"]
                             moved = True
                             break
+
                 if moved:
                     break
 
@@ -178,24 +172,22 @@ class BaseChessEnv(gymnasium.Env):
         # Return the new observation, reward, done flag, and additional info (empty for now)
         return self._get_observation(), reward, done, False, {}
 
-    def _reset(
-        self, *, seed=None, options=None
-    ) -> Tuple[Dict[Any, Any], Dict[Any, Any]]:
+    def _reset(self, *, seed=None, options=None) -> None:
         # Reset the board to the initial state
-        self.board = Board(self.board.dim_x, self.board.dim_y)
+        self.board = Board()
         self.populate_board()
 
     def render(self, mode=None):
         if mode is None:
             mode = self.render_mode
-        self.board.draw(self.screen, self.square_size)
+        self.board.draw(self.screen)
         pygame.display.flip()
         if mode == "rgb_array":
             try:
                 pg_frame = surfarray.pixels3d(
                     self.screen
                 )  # convert the surface to a np array. Only works with depth 24 or 32, not less
-            except:
+            except Exception:
                 pg_frame = surfarray.array3d(
                     self.screen
                 )  # convert the surface to a np array. Works with any depth
@@ -207,19 +199,23 @@ class BaseChessEnv(gymnasium.Env):
             return cv_frame
 
     def board_from_observation(self, observation: np.ndarray) -> Board:
-        board = Board(self.board.dim_x, self.board.dim_y)
-        observation = observation.reshape(self.board.dim_x, self.board.dim_y, 14)
-        for i in range(self.board.dim_x):
-            for j in range(self.board.dim_y):
-                for k in range(14):
-                    if observation[i, j, k] == 1:
-                        color = Color.WHITE if k > 6 else Color.BLACK
-                        piece = None
-                        if k != 0:
-                            piece = list(piece_to_index.keys())[
-                                list(piece_to_index.values()).index(k % 7)
-                            ]
-                        board.add_piece(piece(color=color, position=Position(j, i)))
+        board = Board()
+        observation = observation.reshape(dim_x, dim_y, 3).astype(np.uint8)
+        observation = observation[:, :, :2]
+        observation = (
+            (observation - observation.min())
+            / (observation.max() - observation.min())
+            * 6
+        )
+
+        for i in range(dim_x):
+            for j in range(dim_y):
+                for r, color in enumerate([Color.WHITE, Color.BLACK]):
+                    k = observation[i][j][r]
+                    piece = None
+                    if k != 0:
+                        piece = index_to_piece[k](color=color, position=Position(j, i))
+                        board.add_piece(board, piece)
         board.update()
         return board
 
@@ -227,14 +223,14 @@ class BaseChessEnv(gymnasium.Env):
         board = self.board_from_observation(observation)
         if mode is None:
             mode = self.render_mode
-        board.draw(self.screen, self.square_size)
+        board.draw(self.screen)
         pygame.display.flip()
         if mode == "rgb_array":
             try:
                 pg_frame = surfarray.pixels3d(
                     self.screen
                 )  # convert the surface to a np array. Only works with depth 24 or 32, not less
-            except:
+            except Exception:
                 pg_frame = surfarray.array3d(self.screen)
             cv_frame = pg_to_cv2(pg_frame)
             return cv_frame
