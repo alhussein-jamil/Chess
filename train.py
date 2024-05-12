@@ -169,6 +169,7 @@ def evaluate(epoch, run, env_creator, algo, rollout_worker, run_config):
 
 
 def main():
+    last_render_time = 0.0
     training_config = yaml.safe_load(open("./config.yaml"))["training"]
     run_config = training_config["run"]
 
@@ -236,7 +237,7 @@ def main():
         default_policy_class=algo.get_default_policy_class(cfg),
     )
 
-    if not run_config.get("clean_run", False) and latest_log_dir is not None:
+    if run_config.get("clean_run", False) and latest_log_dir is not None:
         try:
             algo.restore(checkpoint_path=latest_log_dir)
             print("Restored from checkpoint:", latest_log_dir)
@@ -266,7 +267,7 @@ def main():
     print(f"Saving every {save_freq} iterations")
 
     for epoch in range(starting_epoch, total_epochs):
-        if epoch % render_freq == 0:
+        if epoch % render_freq == 0 or time.time() - last_render_time > 1800:
             evaluate(
                 epoch=epoch,
                 run=run,
@@ -275,6 +276,7 @@ def main():
                 rollout_worker=rollout_worker,
                 run_config=run_config,
             )
+            last_render_time = time.time()
 
         result = algo.train()
 

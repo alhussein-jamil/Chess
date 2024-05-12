@@ -205,7 +205,7 @@ class Rook(Piece):
                 else:
                     if board.get(new_position).color != self.color:
                         moves.append(new_position)
-                        return False
+                        return True
 
             return True
 
