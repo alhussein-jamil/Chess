@@ -237,7 +237,7 @@ def main():
         default_policy_class=algo.get_default_policy_class(cfg),
     )
 
-    if run_config.get("clean_run", False) and latest_log_dir is not None:
+    if not run_config.get("clean_run", False) and latest_log_dir is not None:
         try:
             algo.restore(checkpoint_path=latest_log_dir)
             print("Restored from checkpoint:", latest_log_dir)

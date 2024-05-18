@@ -315,7 +315,7 @@ class Board:
         return False
 
     def check_end(self, color: Color):
-        if self.moves_without_capture >= 30:
+        if self.moves_without_capture >= 80:
             return Ending.DRAW
 
         if self.check_material_insufficient():
