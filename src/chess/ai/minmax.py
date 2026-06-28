@@ -7,13 +7,12 @@ import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Any
 
-from chess.ai.zobrist import ZOBRIST_PIECES, ZOBRIST_TURN, square_index
 from chess.core.board import Board
+from chess.core.board_state import MATE_SCORE, PIECE_VALUES, BoardState, Move4
 from chess.core.piece import King, NullPiece, Position
 from chess.core.types import Color, Ending, PieceType
 
 Move = tuple[Position, Position]
-MATE_SCORE = 100_000.0
 
 TT_EXACT = 0
 TT_LOWER = 1
@@ -42,45 +41,35 @@ class MinMaxAgent:
             return 1
         cpus = os.cpu_count() or 1
         limit = cpus if self.workers <= 0 else self.workers
-        return max(1, min(limit, move_count, 8))
+        return max(1, min(limit, move_count))
 
     @staticmethod
-    def is_terminal(board: Board) -> bool:
-        return (
-            board.checkmates[Color.WHITE] != Ending.ONGOING
-            or board.checkmates[Color.BLACK] != Ending.ONGOING
-        )
-
-    @staticmethod
-    def board_hash(board: Board) -> int:
-        digest = ZOBRIST_TURN if board.turn == Color.BLACK else 0
-        for piece in board.pieces[Color.WHITE] + board.pieces[Color.BLACK]:
-            idx = square_index(piece.position.x, piece.position.y)
-            digest ^= ZOBRIST_PIECES[idx][piece.color.value - 1][piece.piece_type.value - 1]
-        return digest
+    def resolve_pool_workers(workers: int) -> int:
+        """Process pool size for parallel root-move search."""
+        if workers == 1:
+            return 1
+        cpus = os.cpu_count() or 1
+        return cpus if workers <= 0 else workers
 
     @staticmethod
     def generate_possible_moves(board: Board, *, update: bool = True) -> list[Move]:
         if update:
             board.update()
-        moves: list[Move] = []
-        side = board.turn
+        return [MinMaxAgent._coords_to_move(m) for m in board.state.generate_legal_moves()]
 
-        for piece in board.pieces[side]:
-            origin = Position(piece.position.x, piece.position.y)
-            for target in piece.legal_moves:
-                ok, _ = board.try_move(piece, target, move=False)
-                if ok:
-                    moves.append((origin, Position(target.x, target.y)))
+    def evaluate_state(self, state: BoardState) -> float:
+        agent_color = 0 if self.color == Color.WHITE else 1
+        if state.halfmove >= 80 or state.insufficient_material():
+            return 0.0
 
-        king = board.kings.get(side)
-        if king is not None and king.moved == 0:
-            origin = Position(king.position.x, king.position.y)
-            for target_x in (6, 2):
-                dest = Position(target_x, king.position.y)
-                if board.can_castle_to(king, dest):
-                    moves.append((origin, dest))
-        return moves
+        if not state.has_legal_move():
+            side = state.turn
+            score = (MATE_SCORE if side == 1 else -MATE_SCORE) if state.in_check(side) else 0.0
+            if agent_color == 1:
+                score = -score
+            return float(score)
+
+        return state.evaluate(agent_color, mobility=True)
 
     def evaluate(self, board: Board) -> float:
         white = board.checkmates[Color.WHITE]
@@ -96,15 +85,7 @@ class MinMaxAgent:
         ):
             score = 0.0
         else:
-            score = 0.0
-            for piece in board.pieces[Color.WHITE]:
-                score += piece.value + 0.05 * len(piece.legal_moves)
-            for piece in board.pieces[Color.BLACK]:
-                score -= piece.value + 0.05 * len(piece.legal_moves)
-            if board.checks[Color.WHITE]:
-                score -= 0.5
-            if board.checks[Color.BLACK]:
-                score += 0.5
+            return self.evaluate_state(board.state)
 
         if self.color == Color.BLACK:
             score = -score
@@ -133,58 +114,65 @@ class MinMaxAgent:
         return ok
 
     @staticmethod
-    def _sync_terminal(board: Board) -> None:
-        for color in (Color.WHITE, Color.BLACK):
-            if board.checkmates[color] == Ending.ONGOING:
-                board.checkmates[color] = board.check_end(color)
-
-    @staticmethod
     def _move_coords(move: Move) -> tuple[int, int, int, int]:
         return (move[0].x, move[0].y, move[1].x, move[1].y)
 
     @staticmethod
-    def _coords_to_move(coords: tuple[int, int, int, int]) -> Move:
+    def _coords_to_move(coords: Move4) -> Move:
         fx, fy, tx, ty = coords
         return (Position(fx, fy), Position(tx, ty))
 
     def choose_move(self, board: Board) -> Move | None:
         self._tt.clear()
-        board.update()
-        moves = self.generate_possible_moves(board, update=False)
+        state = board.state
+        moves = state.generate_legal_moves()
         if not moves:
             return None
         if len(moves) == 1:
-            return moves[0]
+            return self._coords_to_move(moves[0])
 
         workers = self._worker_count(len(moves))
         if workers > 1:
-            return self._choose_parallel(board, moves, workers)
-        move, _ = self.minimax(board, self.depth, float("-inf"), float("inf"))
-        return move
+            move = self._choose_parallel_from_state(
+                board.to_search_state(), moves, workers, executor=_get_search_pool(workers)
+            )
+            return self._coords_to_move(move) if move is not None else None
+        move, _ = self._minimax(state, self.depth, float("-inf"), float("inf"))
+        return self._coords_to_move(move) if move is not None else None
 
-    def _choose_parallel(self, board: Board, moves: list[Move], workers: int) -> Move | None:
-        state = board.to_search_state()
-        payload = (state, self.depth, self.color.value, self.max_n_samples)
-        ordered = _order_moves(board, moves)
-        best_move: Move | None = None
+    def _choose_parallel_from_state(
+        self,
+        state_tuple: tuple[Any, ...],
+        moves: list[Move4],
+        workers: int,
+        *,
+        executor: ProcessPoolExecutor | None = None,
+    ) -> Move4 | None:
+        state = BoardState.from_search_state(state_tuple)
+        ordered = _order_moves(state, moves)
+        best_move: Move4 | None = None
         best_value = float("-inf")
+        payload = (state_tuple, self.depth, self.color.value, self.max_n_samples)
 
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            futures = {
-                pool.submit(_score_root_move, payload, self._move_coords(move)): move
-                for move in ordered
-            }
+        def collect(pool: ProcessPoolExecutor) -> Move4 | None:
+            nonlocal best_move, best_value
+            futures = {pool.submit(_score_root_move, payload, move): move for move in ordered}
             for future in as_completed(futures):
                 move_coords, value = future.result()
                 if value > best_value or best_move is None:
                     best_value = value
-                    best_move = self._coords_to_move(move_coords)
-        return best_move
+                    best_move = move_coords
+            return best_move
 
-    def minimax(
-        self, board: Board, depth: int, alpha: float, beta: float
-    ) -> tuple[Move | None, float]:
-        board_hash = self.board_hash(board)
+        if executor is not None:
+            return collect(executor)
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            return collect(pool)
+
+    def _minimax(
+        self, state: BoardState, depth: int, alpha: float, beta: float
+    ) -> tuple[Move4 | None, float]:
+        board_hash = state.hash_key()
         cached = self._tt.get(board_hash)
         if cached is not None and cached.depth >= depth:
             if cached.flag == TT_EXACT:
@@ -196,16 +184,10 @@ class MinMaxAgent:
             if alpha >= beta:
                 return None, cached.value
 
-        if depth == 0 or self.is_terminal(board):
-            if depth == 0:
-                self._sync_terminal(board)
-            return None, self.evaluate(board)
+        if depth == 0:
+            return None, self.evaluate_state(state)
 
-        maximizing = board.turn == self.color
-        possible_moves = _order_moves(
-            board,
-            self.generate_possible_moves(board, update=False),
-        )
+        possible_moves = _order_moves(state, state.generate_legal_moves())
 
         if (
             self.max_n_samples
@@ -218,19 +200,19 @@ class MinMaxAgent:
             possible_moves = [possible_moves[i] for i in idx]
 
         if not possible_moves:
-            board.checkmates[board.turn] = board.check_end(board.turn)
-            return None, self.evaluate(board)
+            return None, self.evaluate_state(state)
 
-        best_move: Move | None = None
+        maximizing = state.turn == (0 if self.color == Color.WHITE else 1)
+
+        best_move: Move4 | None = None
         orig_alpha = alpha
 
         if maximizing:
             value = float("-inf")
             for move in possible_moves:
-                trial = board.copy_for_search()
-                if not self.apply_move(trial, move, for_search=True):
-                    continue
-                _, child = self.minimax(trial, depth - 1, alpha, beta)
+                state.make_move(*move)
+                _, child = self._minimax(state, depth - 1, alpha, beta)
+                state.unmake_move()
                 if child > value or best_move is None:
                     value = child
                     best_move = move
@@ -248,10 +230,9 @@ class MinMaxAgent:
 
         value = float("inf")
         for move in possible_moves:
-            trial = board.copy_for_search()
-            if not self.apply_move(trial, move, for_search=True):
-                continue
-            _, child = self.minimax(trial, depth - 1, alpha, beta)
+            state.make_move(*move)
+            _, child = self._minimax(state, depth - 1, alpha, beta)
+            state.unmake_move()
             if child < value or best_move is None:
                 value = child
                 best_move = move
@@ -268,31 +249,69 @@ class MinMaxAgent:
         return best_move, value
 
 
-def _order_moves(board: Board, moves: list[Move]) -> list[Move]:
-    def capture_value(move: Move) -> int:
-        target = board.get(move[1])
-        return 0 if isinstance(target, NullPiece) else target.value
+def _order_moves(state: BoardState, moves: list[Move4]) -> list[Move4]:
+    def capture_value(move: Move4) -> int:
+        tx, ty = move[2], move[3]
+        captured = int(state.grid[ty, tx])
+        if captured == 0:
+            return 0
+        return PIECE_VALUES.get(abs(captured), 0)
 
     return sorted(moves, key=capture_value, reverse=True)
 
 
-def _score_root_move(
+_search_pool: ProcessPoolExecutor | None = None
+_search_pool_workers = 0
+
+
+def _get_search_pool(workers: int) -> ProcessPoolExecutor:
+    global _search_pool, _search_pool_workers
+    if _search_pool is None or _search_pool_workers != workers:
+        if _search_pool is not None:
+            _search_pool.shutdown(wait=False, cancel_futures=True)
+        _search_pool = ProcessPoolExecutor(max_workers=workers)
+        _search_pool_workers = workers
+    return _search_pool
+
+
+def shutdown_search_pool() -> None:
+    global _search_pool, _search_pool_workers
+    if _search_pool is not None:
+        _search_pool.shutdown(wait=False, cancel_futures=True)
+        _search_pool = None
+        _search_pool_workers = 0
+
+
+def _choose_move_serial(
     payload: tuple[Any, int, int, int | None],
-    move_coords: tuple[int, int, int, int],
-) -> tuple[tuple[int, int, int, int], float]:
-    state, depth, color_value, max_n_samples = payload
-    board = Board.from_search_state(state)
-    move = MinMaxAgent._coords_to_move(move_coords)
+) -> Move4 | None:
+    state_tuple, depth, color_value, max_n_samples = payload
     agent = MinMaxAgent(
         color=Color(color_value),
         depth=depth,
         max_n_samples=max_n_samples,
         workers=1,
     )
-    trial = board.copy_for_search()
-    if not MinMaxAgent.apply_move(trial, move, for_search=True):
+    state = BoardState.from_search_state(state_tuple)
+    move, _ = agent._minimax(state, depth, float("-inf"), float("inf"))
+    return move
+
+
+def _score_root_move(
+    payload: tuple[Any, int, int, int | None],
+    move_coords: Move4,
+) -> tuple[Move4, float]:
+    state_tuple, depth, color_value, max_n_samples = payload
+    state = BoardState.from_search_state(state_tuple)
+    agent = MinMaxAgent(
+        color=Color(color_value),
+        depth=depth,
+        max_n_samples=max_n_samples,
+        workers=1,
+    )
+    if not state.make_move(*move_coords):
         return move_coords, float("-inf")
-    _, value = agent.minimax(trial, depth - 1, float("-inf"), float("inf"))
+    _, value = agent._minimax(state, depth - 1, float("-inf"), float("inf"))
     return move_coords, value
 
 
@@ -303,14 +322,26 @@ def choose_move_in_subprocess(
     max_n_samples: int | None,
     workers: int,
 ) -> tuple[int, int, int, int] | None:
-    board = Board.from_search_state(state)
     agent = MinMaxAgent(
         color=color,
         depth=depth,
         max_n_samples=max_n_samples,
         workers=workers,
     )
-    move = agent.choose_move(board)
+    search_state = BoardState.from_search_state(state)
+    moves = search_state.generate_legal_moves()
+    if not moves:
+        return None
+    if len(moves) == 1:
+        return moves[0]
+    payload = (state, depth, color.value, max_n_samples)
+    parallel_workers = agent._worker_count(len(moves))
+    if parallel_workers > 1:
+        move = agent._choose_parallel_from_state(
+            state, moves, parallel_workers, executor=_get_search_pool(parallel_workers)
+        )
+    else:
+        move = _choose_move_serial(payload)
     if move is None:
         return None
-    return MinMaxAgent._move_coords(move)
+    return move

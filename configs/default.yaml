@@ -6,7 +6,7 @@ display:
   vs_ai_height: 848
 
 ai:
-  depth: 3
+  depth: 5
   color: black
   max_n_samples: null
   workers: 0

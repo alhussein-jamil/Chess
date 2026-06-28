@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import pytest
 
-from chess.ai.minmax import MinMaxAgent
+from chess.ai.minmax import MinMaxAgent, choose_move_in_subprocess
 from chess.core.board import Board
 from chess.core.piece import (
     STARTING_PIECES,
@@ -14,6 +14,7 @@ from chess.core.piece import (
     Rook,
 )
 from chess.core.types import Color, Ending
+from chess.ui.vs_ai import _BackgroundAi
 
 
 @pytest.fixture
@@ -91,3 +92,32 @@ def test_terminal_checkmate_score() -> None:
     black_agent = MinMaxAgent(color=Color.BLACK, depth=1)
     assert white_agent.evaluate(board) > 50_000
     assert black_agent.evaluate(board) < -50_000
+
+
+def test_choose_move_in_subprocess_parallel(starting_board: Board) -> None:
+    state = starting_board.to_search_state()
+    coords = choose_move_in_subprocess(state, 3, Color.WHITE, None, 0)
+    assert coords is not None
+    move = MinMaxAgent._coords_to_move(coords)
+    assert move in MinMaxAgent.generate_possible_moves(starting_board)
+
+
+def test_background_ai_parallel_path(starting_board: Board) -> None:
+    white_move = MinMaxAgent.generate_possible_moves(starting_board)[0]
+    assert MinMaxAgent.apply_move(starting_board, white_move)
+    assert starting_board.turn == Color.BLACK
+
+    agent = MinMaxAgent(color=Color.BLACK, depth=3, workers=0)
+    bg = _BackgroundAi(workers=0)
+    try:
+        assert bg.pool_size >= 2
+        bg.request_move(starting_board, agent)
+        while bg.thinking:
+            pass
+        move = bg.take_move()
+        assert move is not None
+        legal = MinMaxAgent.generate_possible_moves(starting_board)
+        assert move in legal
+        assert MinMaxAgent.apply_move(starting_board, move)
+    finally:
+        bg.shutdown()

@@ -54,7 +54,7 @@ class DisplaySettings:
 
 @dataclass(frozen=True)
 class AISettings:
-    depth: int = 3
+    depth: int = 5
     color: Color = Color.BLACK
     max_n_samples: int | None = None
     workers: int = 0
@@ -104,7 +104,7 @@ class AppSettings:
         game_raw = _section(data, "game", {})
 
         ai = AISettings(
-            depth=int(ai_raw.get("depth", 3)),
+            depth=int(ai_raw.get("depth", 5)),
             color=_parse_color(str(ai_raw.get("color", "black"))),
             max_n_samples=ai_raw.get("max_n_samples"),
             workers=int(ai_raw.get("workers", 0)),

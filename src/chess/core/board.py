@@ -3,6 +3,9 @@ from typing import Any
 
 import pygame
 
+from chess.core.board_state import KING as STATE_KING
+from chess.core.board_state import PAWN as STATE_PAWN
+from chess.core.board_state import PIECE_VALUES, BoardState
 from chess.core.types import (
     DIM_X as dim_x,
 )
@@ -10,11 +13,9 @@ from chess.core.types import (
     DIM_Y as dim_y,
 )
 from chess.core.types import (
-    LEGAL,
     SQUARE_SIZE,
     Color,
     Ending,
-    MoveState,
     PieceType,
 )
 from chess.layout import BOARD_INSET
@@ -45,7 +46,6 @@ _PIECE_CLASSES = {
 
 @dc.dataclass
 class Board:
-    danger_level: dict[Position, int] = dc.field(default_factory=dict)
     pieces: dict[Color, list[Piece]] = dc.field(default_factory=dict)
     dragged_piece: Piece | None = None
     drag_origin: Position | None = None
@@ -57,6 +57,16 @@ class Board:
     board: dict[Position, Piece] = dc.field(default_factory=dict)
     kings: dict[Color, King] = dc.field(default_factory=dict)
     last_move: tuple[Position, Position] | None = None
+    _state: BoardState | None = dc.field(default=None, repr=False, compare=False)
+
+    def invalidate_state(self) -> None:
+        self._state = None
+
+    @property
+    def state(self) -> BoardState:
+        if self._state is None:
+            self._state = BoardState.from_board(self)
+        return self._state
 
     def __post_init__(self):
         self.checks = {Color.WHITE: False, Color.BLACK: False}
@@ -78,6 +88,7 @@ class Board:
         board.pieces[piece.color].append(piece)
         piece.created = True
         board.board[piece.position] = piece
+        board.invalidate_state()
 
     def get(self, position: Position) -> Piece:
         if not self.in_bounds(position):
@@ -96,43 +107,6 @@ class Board:
                 return Knight(color=piece.color, position=piece.position)
             case _:
                 return piece
-
-    def copy_for_search(self) -> "Board":
-        trial = Board(
-            turn=self.turn,
-            promotion=self.promotion,
-            moves_without_capture=self.moves_without_capture,
-        )
-        trial.checks = {
-            Color.WHITE: self.checks[Color.WHITE],
-            Color.BLACK: self.checks[Color.BLACK],
-        }
-        trial.checkmates = {
-            Color.WHITE: self.checkmates[Color.WHITE],
-            Color.BLACK: self.checkmates[Color.BLACK],
-        }
-        trial.pieces = {
-            Color.WHITE: [self._clone_piece(piece) for piece in self.pieces[Color.WHITE]],
-            Color.BLACK: [self._clone_piece(piece) for piece in self.pieces[Color.BLACK]],
-        }
-        trial._sync_grid_from_pieces()
-        return trial
-
-    def copy_ai(self) -> "Board":
-        return self.copy_for_search()
-
-    @staticmethod
-    def _clone_piece(piece: Piece) -> Piece:
-        cls = type(piece)
-        cloned = cls(
-            color=piece.color,
-            position=Position(piece.position.x, piece.position.y),
-        )
-        cloned.moved = piece.moved
-        cloned.created = piece.created
-        cloned.legal_moves = list(piece.legal_moves)
-        cloned.attacking_squares = list(piece.attacking_squares)
-        return cloned
 
     def _sync_grid_from_pieces(self) -> None:
         self.board = {Position(x, y): NullPiece() for x in range(dim_x) for y in range(dim_y)}
@@ -173,154 +147,108 @@ class Board:
             (white if piece.color == Color.WHITE else black).append(piece)
         board.pieces = {Color.WHITE: white, Color.BLACK: black}
         board._sync_grid_from_pieces()
+        board.invalidate_state()
         board.update()
         return board
-
-    def can_castle_to(self, king: King, new_position: Position) -> bool:
-        if (
-            king.piece_type != PieceType.KING
-            or king.moved != 0
-            or abs(king.position.x - new_position.x) != 2
-        ):
-            return False
-
-        direction = 1 if new_position.x > king.position.x else -1
-        n_squares = 3 if direction == 1 else 4
-        rook_position = Position(7 if direction == 1 else 0, new_position.y)
-        rook = self.get(rook_position)
-        if isinstance(rook, NullPiece) or rook.piece_type != PieceType.ROOK or rook.moved != 0:
-            return False
-
-        empty_squares = all(
-            isinstance(
-                self.get(Position(king.position.x + step * direction, king.position.y)),
-                NullPiece,
-            )
-            for step in range(1, n_squares)
-        )
-        if not empty_squares:
-            return False
-
-        opponent_color = Color.WHITE if king.color == Color.BLACK else Color.BLACK
-        for step in range(1, n_squares):
-            square = Position(king.position.x + step * direction, king.position.y)
-            for piece in self.pieces[opponent_color]:
-                if square in piece.legal_moves:
-                    return False
-        return True
 
     @staticmethod
     def in_bounds(position: Position) -> bool:
         return 0 <= position.x < dim_x and 0 <= position.y < dim_y
 
-    def update(self):
-        self._update_board()
-        self._update_pieces()
-        self._update_checks()
+    def update(self) -> None:
+        self._sync_grid_from_pieces()
+        self._sync_checks_from_state()
 
-    def _update_board(self):
-        self.board = {position: NullPiece() for position in self.board}
+    def _find_piece_at(self, x: int, y: int) -> Piece | None:
+        target = Position(x, y)
         for piece in self.pieces[Color.WHITE] + self.pieces[Color.BLACK]:
-            self.board[piece.position] = piece
+            if piece.position == target:
+                return piece
+        return None
 
-    def _update_pieces(self):
-        self.danger_level = {}
-        for piece in self.pieces[Color.WHITE] + self.pieces[Color.BLACK]:
-            self._update_piece(piece)
+    def _sync_pieces_from_undo(self, undo) -> int:
+        moved = undo.moved_piece
+        sign = 1 if moved > 0 else -1
+        color = Color.WHITE if sign > 0 else Color.BLACK
 
-    def _update_piece(self, piece: Piece):
-        if isinstance(piece, King):
-            self.kings[piece.color] = piece
-        piece.update_legal_moves(self)
-        for position in piece.attacking_squares:
-            if self.in_bounds(position):
-                self.danger_level[position] = self.danger_level.get(position, 0) + (
-                    1 if piece.color == Color.WHITE else -1
-                )
+        piece = self._find_piece_at(undo.fx, undo.fy)
+        if piece is None:
+            return 0
 
-    def _update_checks(self):
-        self.checks = {Color.WHITE: False, Color.BLACK: False}
-        # check if the kings are in check
-        for color, king in self.kings.items():
-            if king is not None:
-                opposite_color = Color.WHITE if color == Color.BLACK else Color.BLACK
-                opposite_color_pieces = self.pieces[opposite_color]
-                for piece in opposite_color_pieces:
-                    if king.position in piece.attacking_squares:
-                        self.checks[color] = True
-                        break
-                else:
-                    self.checks[color] = False
+        capture_value = 0
+        if undo.captured:
+            captured = self._find_piece_at(undo.tx, undo.ty)
+            if captured is not None:
+                self.pieces[captured.color].remove(captured)
+                capture_value = PIECE_VALUES.get(abs(undo.captured), 0)
+
+        piece.position = Position(undo.tx, undo.ty)
+        piece.moved += 1
+
+        promo_rank = 0 if sign > 0 else 7
+        if abs(moved) == STATE_PAWN and undo.ty == promo_rank:
+            self.pieces[color].remove(piece)
+            promoted = self.promote_to(piece)
+            promoted.moved = piece.moved
+            promoted.created = True
+            self.pieces[color].append(promoted)
+
+        if abs(moved) == STATE_KING and abs(undo.tx - undo.fx) == 2:
+            direction = 1 if undo.tx > undo.fx else -1
+            rook_from_x = 7 if direction == 1 else 0
+            rook_to_x = undo.tx - direction
+            rook = self._find_piece_at(rook_from_x, undo.fy)
+            if rook is not None:
+                rook.position = Position(rook_to_x, undo.fy)
+                rook.moved += 1
+
+        return capture_value
+
+    def _sync_checks_from_state(self) -> None:
+        snapshot = self.state
+        self.checks = {
+            Color.WHITE: snapshot.in_check(0),
+            Color.BLACK: snapshot.in_check(1),
+        }
 
     def move_piece(
         self, piece: Piece, new_position: Position, *, update_result: bool = True
     ) -> tuple[bool, int]:
-        return_value = False
-        capture_value = 0
         origin = Position(piece.position.x, piece.position.y)
-        if self.in_bounds(new_position):
-            move_state = piece.move(new_position, self)
-            return_value = self.handle_castling(piece, new_position)
+        if not self.in_bounds(new_position):
+            return False, 0
 
-            if not return_value and any(state in move_state for state in LEGAL):
-                return_value, capture_value = self.try_move(piece, new_position)
+        if isinstance(piece, King) and abs(new_position.x - origin.x) == 2:
+            if not self.handle_castling(piece, new_position):
+                return False, 0
+            if update_result:
+                opposite = Color.WHITE if piece.color == Color.BLACK else Color.BLACK
+                self.checkmates[opposite] = self.check_end(opposite)
+            return True, 0
 
-            # Handle Dragging new piece
-            if MoveState.CREATED in move_state:
-                self.pieces[piece.color].append(piece)
-
-            # Handle promotion
-            self.handle_promotion(piece)
-            self.update()
-            return_value = return_value and not self.checks[piece.color]
-
-            if return_value:
-                if update_result:
-                    self.last_move = (origin, Position(new_position.x, new_position.y))
-                opposite_color = Color.WHITE if piece.color == Color.BLACK else Color.BLACK
-                self.turn = opposite_color
-                if update_result:
-                    self.checkmates[opposite_color] = self.check_end(opposite_color)
-
-        return return_value, capture_value
-
-    def _undo_move(self, piece, old_position, backup_piece):
-        piece.position = old_position
-        piece.moved -= 1
-        if (
-            not isinstance(backup_piece, NullPiece)
-            and backup_piece not in self.pieces[Color.WHITE] + self.pieces[Color.BLACK]
-        ):
-            self.pieces[backup_piece.color].append(backup_piece)
+        ok, capture_value = self.try_move(piece, new_position, move=True)
+        if ok and update_result:
+            self.last_move = (origin, Position(new_position.x, new_position.y))
+            opposite = Color.WHITE if piece.color == Color.BLACK else Color.BLACK
+            self.checkmates[opposite] = self.check_end(opposite)
+        return ok, capture_value
 
     def try_move(self, piece: Piece, new_position: Position, move: bool = True):
-        # Move the piece to the new position
-        old_position = Position(piece.position.x, piece.position.y)
-        piece.position = new_position
-        piece.moved += 1
+        fx, fy = piece.position.x, piece.position.y
+        tx, ty = new_position.x, new_position.y
+        if not move:
+            return self.state.would_be_legal(fx, fy, tx, ty), 0
 
-        backup_piece = self.board[new_position]
-        capture_value = 0
-        if backup_piece in self.pieces[Color.WHITE]:
-            self.pieces[Color.WHITE].remove(backup_piece)
-        elif backup_piece in self.pieces[Color.BLACK]:
-            self.pieces[Color.BLACK].remove(backup_piece)
-        self.update()
-        return_value = True
-        if move:
-            if self.checks[piece.color]:
-                self._undo_move(piece, old_position, backup_piece)
-                return_value = False
-            else:
-                self.moves_without_capture += 1
-                if not isinstance(backup_piece, NullPiece):
-                    self.moves_without_capture = 0
-                    capture_value += backup_piece.value
-        else:
-            self._undo_move(piece, old_position, backup_piece)
-            return_value = not self.checks[piece.color]
-        self.update()
-        return return_value, capture_value
+        if not self.state.make_move(fx, fy, tx, ty):
+            return False, 0
+
+        undo = self.state.peek_undo()
+        capture_value = self._sync_pieces_from_undo(undo) if undo is not None else 0
+        self.turn = Color.BLACK if self.state.turn == 1 else Color.WHITE
+        self.moves_without_capture = self.state.halfmove
+        self._sync_grid_from_pieces()
+        self._sync_checks_from_state()
+        return True, capture_value
 
     @staticmethod
     def mouse_to_grid(mouse_pos: tuple[int, int], square_size: int) -> Position:
@@ -337,18 +265,12 @@ class Board:
         self.board[origin] = self.dragged_piece
         self.dragged_piece = None
         self.drag_origin = None
+        self.invalidate_state()
 
     def is_legal_target(self, piece: Piece, target: Position, origin: Position) -> bool:
         if not self.in_bounds(target):
             return False
-
-        if isinstance(piece, King) and target.y == origin.y and abs(target.x - origin.x) == 2:
-            return self.can_castle_to(piece, target)
-
-        if target not in piece.legal_moves:
-            return False
-        ok, _ = self.try_move(piece, target, move=False)
-        return ok
+        return self.state.would_be_legal(origin.x, origin.y, target.x, target.y)
 
     def handle_event(self, event, square_size: int = SQUARE_SIZE) -> bool:
         """Handle mouse input. Returns True if a legal move was played."""
@@ -361,6 +283,7 @@ class Board:
                 self.drag_origin = Position(mouse_position.x, mouse_position.y)
                 self.dragged_piece = piece
                 self.board[mouse_position] = NullPiece()
+                self.invalidate_state()
             return False
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
@@ -387,105 +310,40 @@ class Board:
 
         return False
 
-    def handle_promotion(self, piece: Piece):
-        if piece.piece_type == PieceType.PAWN and (
-            (piece.position.y == 0 and piece.color == Color.WHITE)
-            or (piece.position.y == 7 and piece.color == Color.BLACK)
-        ):
-            if piece in self.pieces[Color.WHITE]:
-                self.pieces[Color.WHITE].remove(piece)
-            else:
-                self.pieces[Color.BLACK].remove(piece)
-            self.add_piece(self, self.promote_to(piece))
-
     def handle_castling(self, king: Piece, new_position: Position):
-        # Check if the move is a castling move
         if (
-            king.piece_type == PieceType.KING
-            and king.moved == 0
-            and abs(king.position.x - new_position.x) == 2
+            king.piece_type != PieceType.KING
+            or king.moved != 0
+            or abs(king.position.x - new_position.x) != 2
         ):
-            # Determine direction of castling (short or long)
-            direction = 1 if new_position.x > king.position.x else -1
-            n_squares = 3 if direction == 1 else 4
-            # Get the rook position
-            rook_position = Position(7 if direction == 1 else 0, new_position.y)
-            rook = self.get(rook_position)
-            # Check if the rook is present and hasn't moved
-            if rook is not NullPiece() and rook.piece_type == PieceType.ROOK and rook.moved == 0:
-                # Check if squares between king and rook are empty
-                empty_squares = all(
-                    isinstance(
-                        self.get(Position(king.position.x + i * direction, king.position.y)),
-                        NullPiece,
-                    )
-                    for i in range(1, n_squares)
-                )
-                opponent_color = Color.WHITE if king.color == Color.BLACK else Color.BLACK
-                # Check if squares between king and rook are controlled by the opponent
-                squares_between_ = [
-                    Position(king.position.x + i * direction, king.position.y)
-                    for i in range(1, n_squares)
-                ]
-                controlled_squares = False
-                # check that no piece is attacking the squares between the king and the rook
-                for position in squares_between_:
-                    opposite_color_pieces = self.pieces[opponent_color]
-                    for piece in opposite_color_pieces:
-                        if position in piece.legal_moves:
-                            controlled_squares = True
-                            break
-                # Check if castling move is legal
-                if empty_squares and not controlled_squares:
-                    origin = Position(king.position.x, king.position.y)
-                    self.try_move(king, new_position)
-                    self.try_move(rook, Position(king.position.x - direction, king.position.y))
-                    self.last_move = (origin, Position(new_position.x, new_position.y))
-                    return True
-        return False
+            return False
 
-    def check_material_insufficient(self):
-        all_pieces = self.pieces[Color.WHITE] + self.pieces[Color.BLACK]
-        # Check if there is insufficient material for checkmate
-        if len(all_pieces) == 2:
-            return True
-        elif len(all_pieces) == 3:
-            # Check if the remaining pieces are knights or bishops
-            piece_types = [
-                piece.piece_type for piece in self.pieces[Color.WHITE] + self.pieces[Color.BLACK]
-            ]
-            return all(
-                piece_type in [PieceType.KNIGHT, PieceType.BISHOP] for piece_type in piece_types
-            )
-        elif len(all_pieces) == 4:
-            # Check for specific scenarios where the combination of pieces
-            # could lead to a draw due to insufficient material for checkmate
-            piece_types = [piece.piece_type for piece in all_pieces]
-            # If the remaining pieces are two bishops of opposite colors
-            if piece_types.count(PieceType.BISHOP) == 2:
-                piece_colors = [
-                    piece.color for piece in all_pieces if piece.piece_type == PieceType.BISHOP
-                ]
-                if piece_colors[0] != piece_colors[1]:
-                    return True
-            # If the remaining pieces are a bishop and a knight
-            if PieceType.BISHOP in piece_types and PieceType.KNIGHT in piece_types:
-                return True
-        return False
+        origin = Position(king.position.x, king.position.y)
+        if not self.state.would_be_legal(origin.x, origin.y, new_position.x, new_position.y):
+            return False
+
+        if not self.state.make_move(origin.x, origin.y, new_position.x, new_position.y):
+            return False
+
+        undo = self.state.peek_undo()
+        if undo is not None:
+            self._sync_pieces_from_undo(undo)
+        self.turn = Color.BLACK if self.state.turn == 1 else Color.WHITE
+        self.moves_without_capture = self.state.halfmove
+        self._sync_grid_from_pieces()
+        self._sync_checks_from_state()
+        self.last_move = (origin, Position(new_position.x, new_position.y))
+        return True
 
     def check_end(self, color: Color):
         if self.moves_without_capture >= 80:
             return Ending.DRAW
 
-        if self.check_material_insufficient():
+        if self.state.insufficient_material():
             return Ending.DRAW
 
-        color_pieces = self.pieces[color]
-        for piece in color_pieces:
-            for new_position in piece.legal_moves:
-                trying, _ = self.try_move(piece, new_position, False)
-                if trying:
-                    return Ending.ONGOING
+        if self.state.has_legal_move():
+            return Ending.ONGOING
         if self.checks[color]:
             return Ending.CHECKMATE
         return Ending.STALEMATE

@@ -101,7 +101,7 @@ Default file: `configs/default.yaml`. Override with `--config`. CLI flags overri
 | `display.sandbox_height` | `860` | Sandbox window height |
 | `display.vs_ai_width` | *(auto)* | Ignored — window size derived from `square_size` |
 | `display.vs_ai_height` | *(auto)* | Ignored — window size derived from `square_size` |
-| `ai.depth` | `3` | Minimax depth (1–8); `--depth` on `play-ai` overrides |
+| `ai.depth` | `5` | Minimax depth (1–8); `--depth` on `play-ai` overrides |
 | `ai.workers` | `0` | CPU workers for search (`0` = all cores, `1` = single-threaded) |
 | `ai.color` | `black` | AI side (`white` or `black`) |
 | `ai.max_n_samples` | `null` | Random move subsample cap for search |
