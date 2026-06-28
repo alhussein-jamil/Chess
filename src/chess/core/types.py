@@ -1,4 +1,10 @@
+"""Shared chess enums and board constants."""
+
 from enum import Enum
+
+DIM_X = 8
+DIM_Y = 8
+SQUARE_SIZE = 100
 
 
 class Ending(Enum):
@@ -6,11 +12,6 @@ class Ending(Enum):
     STALEMATE = 2
     DRAW = 3
     ONGOING = 4
-
-
-DIM_X: int = 8
-DIM_Y: int = 8
-SQUARE_SIZE: int = 100
 
 
 class MoveState(Enum):
@@ -25,13 +26,6 @@ class MoveState(Enum):
 
 
 LEGAL = [MoveState.MOVED, MoveState.CAPTURED, MoveState.CREATED]
-ILLEGAL = [
-    MoveState.UNREACHABLE,
-    MoveState.OCCUPIED,
-    MoveState.CHECKED,
-    MoveState.NOTALLOWED,
-    MoveState.BLOCKED,
-]
 
 
 class Color(Enum):
@@ -48,3 +42,7 @@ class PieceType(Enum):
     QUEEN = 5
     KING = 6
     UNDEFINED = 7
+
+
+PROMOTION_TYPES = frozenset({"queen", "rook", "bishop", "knight"})
+AI_COLORS = frozenset({"white", "black"})

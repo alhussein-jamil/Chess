@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f141c"/>
+      <stop offset="54%" stop-color="#121b26"/>
+      <stop offset="100%" stop-color="#15151e"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#05070a" flood-opacity="0.38"/>
+    </filter>
+    <marker id="arrow-teal" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3dd6d0"/>
+    </marker>
+    <marker id="arrow-gold" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#f5b94f"/>
+    </marker>
+    <marker id="arrow-coral" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#f17666"/>
+    </marker>
+    <style>
+      .title { font: 700 34px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f4f0e8; }
+      .subtitle { font: 500 17px Inter, ui-sans-serif, system-ui, sans-serif; fill: #aeb8c5; }
+      .label { font: 700 18px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f4f0e8; }
+      .small { font: 600 14px Inter, ui-sans-serif, system-ui, sans-serif; fill: #aeb8c5; }
+      .tiny { font: 600 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #aeb8c5; }
+      .mono { font: 700 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #f4f0e8; }
+      .panel { fill: #17202c; stroke: #324254; stroke-width: 1.2; filter: url(#shadow); }
+      .panel2 { fill: #1d2836; stroke: #3a4b61; stroke-width: 1.1; }
+      .wire { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+
+  <title>Minimax alpha-beta search flow</title>
+  <text x="56" y="66" class="title">Minimax with alpha-beta pruning</text>
+  <text x="56" y="98" class="subtitle">The AI evaluates legal move trees from a copied board, sorts captures first, and stops exploring branches once alpha and beta cross.</text>
+
+  <rect x="58" y="150" width="288" height="352" rx="16" class="panel"/>
+  <text x="88" y="190" class="label">Move generation</text>
+  <text x="88" y="222" class="small">board.update()</text>
+  <text x="88" y="248" class="small">iterate pieces for board.turn</text>
+  <text x="88" y="274" class="small">simulate legal moves</text>
+  <text x="88" y="324" class="label">Evaluation</text>
+  <text x="88" y="356" class="small">material value</text>
+  <text x="88" y="382" class="small">0.05 * legal move count</text>
+  <text x="88" y="408" class="small">check and terminal scores</text>
+  <rect x="86" y="444" width="232" height="36" rx="8" fill="#101923" stroke="#3dd6d0"/>
+  <text x="202" y="467" text-anchor="middle" class="mono">MinMaxAgent</text>
+
+  <rect x="390" y="134" width="566" height="390" rx="18" class="panel"/>
+  <path d="M 640 204 L 434 266" class="wire" stroke="#3dd6d0" stroke-width="2.6"/><path d="M 640 204 L 640 266" class="wire" stroke="#3dd6d0" stroke-width="2.6"/><path d="M 640 204 L 846 266" class="wire" stroke="#3dd6d0" stroke-width="2.6"/><path d="M 434 310 L 336 382" class="wire" stroke="#f5b94f" stroke-width="2.6"/><path d="M 434 310 L 432 382" class="wire" stroke="#f5b94f" stroke-width="2.6"/><path d="M 434 310 L 528 382" class="wire" stroke="#f17666" stroke-width="2.6" stroke-dasharray="8 8"/><path d="M 640 310 L 626 382" class="wire" stroke="#f5b94f" stroke-width="2.6"/><path d="M 640 310 L 724 382" class="wire" stroke="#f5b94f" stroke-width="2.6"/><path d="M 846 310 L 820 382" class="wire" stroke="#f17666" stroke-width="2.6" stroke-dasharray="8 8"/><path d="M 846 310 L 916 382" class="wire" stroke="#f5b94f" stroke-width="2.6"/>
+  <circle cx="640" cy="178" r="26" fill="#111a24" stroke="#3dd6d0" stroke-width="3"/>
+  <text x="640" y="183" text-anchor="middle" class="tiny">root</text>
+  <circle cx="434" cy="288" r="22" fill="#111a24" stroke="#f5b94f" stroke-width="3"/>
+  <text x="434" y="293" text-anchor="middle" class="tiny">A</text>
+  <circle cx="640" cy="288" r="22" fill="#111a24" stroke="#f5b94f" stroke-width="3"/>
+  <text x="640" y="293" text-anchor="middle" class="tiny">B</text>
+  <circle cx="846" cy="288" r="22" fill="#111a24" stroke="#f5b94f" stroke-width="3"/>
+  <text x="846" y="293" text-anchor="middle" class="tiny">C</text>
+  <circle cx="336" cy="400" r="18" fill="#111a24" stroke="#7bd88f" stroke-width="3"/>
+  <text x="336" y="405" text-anchor="middle" class="tiny">+1.4</text>
+  <circle cx="432" cy="400" r="18" fill="#111a24" stroke="#7bd88f" stroke-width="3"/>
+  <text x="432" y="405" text-anchor="middle" class="tiny">+0.7</text>
+  <circle cx="528" cy="400" r="18" fill="#111a24" stroke="#f17666" stroke-width="3"/>
+  <text x="528" y="405" text-anchor="middle" class="tiny">cut</text>
+  <circle cx="626" cy="400" r="18" fill="#111a24" stroke="#7bd88f" stroke-width="3"/>
+  <text x="626" y="405" text-anchor="middle" class="tiny">+2.1</text>
+  <circle cx="724" cy="400" r="18" fill="#111a24" stroke="#7bd88f" stroke-width="3"/>
+  <text x="724" y="405" text-anchor="middle" class="tiny">+1.8</text>
+  <circle cx="820" cy="400" r="18" fill="#111a24" stroke="#f17666" stroke-width="3"/>
+  <text x="820" y="405" text-anchor="middle" class="tiny">cut</text>
+  <circle cx="916" cy="400" r="18" fill="#111a24" stroke="#7bd88f" stroke-width="3"/>
+  <text x="916" y="405" text-anchor="middle" class="tiny">-0.2</text>
+  <text x="640" y="484" text-anchor="middle" class="small">Capture-first ordering improves pruning opportunities.</text>
+
+  <rect x="994" y="150" width="218" height="352" rx="16" class="panel"/>
+  <text x="1024" y="190" class="label">Runtime path</text>
+  <text x="1024" y="222" class="small">copy_ai snapshot</text>
+  <text x="1024" y="248" class="small">background thread</text>
+  <text x="1024" y="274" class="small">choose_move()</text>
+  <text x="1024" y="300" class="small">apply_move()</text>
+  <path d="M 1030 354 L 1180 354" class="wire" stroke="#3dd6d0" stroke-width="6"/>
+  <path d="M 1030 392 L 1140 392" class="wire" stroke="#f5b94f" stroke-width="6"/>
+  <path d="M 1030 430 L 1078 430" class="wire" stroke="#f17666" stroke-width="6"/>
+  <text x="1024" y="468" class="tiny">Depth is config-driven.</text>
+  <text x="1024" y="488" class="tiny">Validation caps range.</text>
+
+  <path d="M 346 326 L 390 326" class="wire" stroke="#3dd6d0" stroke-width="3" marker-end="url(#arrow-teal)"/>
+  <path d="M 956 326 L 994 326" class="wire" stroke="#f5b94f" stroke-width="3" marker-end="url(#arrow-gold)"/>
+  <rect x="92" y="548" width="1070" height="48" rx="14" fill="#101923" stroke="#34475b"/>
+  <text x="122" y="579" class="small">Terminal boards use +/-100000 checkmate scores; draws and stalemates evaluate to 0.</text>
+
+</svg>

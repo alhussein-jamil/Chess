@@ -1,0 +1,15 @@
+display:
+  square_size: 80
+  sandbox_width: 800
+  sandbox_height: 720
+  vs_ai_width: 720
+  vs_ai_height: 760
+
+ai:
+  depth: 1
+  color: black
+  max_n_samples: null
+  workers: 1
+
+game:
+  promotion: queen

@@ -1,63 +1,121 @@
-# Chess Project
+# Chess
 
-Welcome to the Chess Project! This Python project encompasses various components aimed at exploring and enhancing the game of chess. Here's an overview of what you'll find:
+<p align="center">
+  <a href="https://github.com/alhussein-jamil/Chess/actions/workflows/ci.yml"><img src="https://github.com/alhussein-jamil/Chess/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"/></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"/></a>
+  <a href="https://www.pygame.org/"><img src="https://img.shields.io/badge/Pygame-2.6+-2b8a3e.svg" alt="Pygame 2.6+"/></a>
+  <a href="https://docs.astral.sh/ruff/"><img src="https://img.shields.io/badge/lint-Ruff-f5b94f.svg" alt="Ruff"/></a>
+</p>
 
-## Chess Board Base Class: 
-A foundational class that implements the rules of chess, providing the groundwork for the game's mechanics.
+<p align="center">
+  <img src="docs/assets/chess-minimax-hero.png" alt="Generated chess app hero showing a board, control panel, and minimax search visualization">
+</p>
 
-## Interactive Gameplay Script: 
-Experience chess like never before with our interactive gameplay script. Play against a friend in a visually engaging environment powered by pygame. Simply drag and drop pieces to make your moves!
-<center>
-<img src="./assets/game.png" alt="menu" width="500">
-</center>
+Pygame chess board with drag-and-drop play, a free-piece sandbox, and a minimax opponent with alpha-beta pruning.
 
+## Project Status
 
-## Reinforcement Learning Environments: 
-Dive into the world of AI with our reinforcement learning environments, designed to work seamlessly with OpenAI Gym. We offer two environments: one where a single agent learns by playing against itself, and another where two agents engage in a strategic battle.
+| Area | Status |
+|------|--------|
+| Interface | Package CLI, Pygame board rendering, drag-and-drop input, coordinate labels, sandbox piece creation panel, and vs-AI status panel are in place. |
+| Rules | Legal move generation, captures, promotion, castling, check, checkmate, stalemate, draw by material, and move-without-capture draw tracking are implemented in the board layer. |
+| AI | `MinMaxAgent` searches copied board states with minimax, alpha-beta pruning, capture-first ordering, material/mobility evaluation, terminal mate scores, and optional move subsampling. |
+| Tests | Smoke, board movement, layout, and minimax behavior tests are configured for headless CI with SDL's dummy video driver. |
 
-## Reinforcement Learning Agent Training: 
-Train your own AI agent using the powerful Proximal Policy Optimization (PPO) algorithm from ray.rllib. Watch as your agent learns and evolves to master the game of chess.
-<center>
-<img src="./assets/tensorboard.png" alt="menu" width="500">
-</center>
+## What This Implements
 
-## Minimax Algorithm Implementation: 
-Explore advanced gameplay strategies with our implementation of the minimax algorithm enhanced with alpha-beta pruning. Witness the AI make calculated moves to outmaneuver opponents on the chessboard.
+- Interactive chess board using committed piece PNG assets and a dark themed UI.
+- Free-play sandbox for dragging existing pieces and adding new pieces from the side panel.
+- Human-vs-AI mode where the player is White and the black side searches in a background thread.
+- YAML-backed runtime settings for display size, AI depth/color, move subsampling, and promotion choice.
+- Configurable CLI through `chess play` and `chess play-ai`.
+- Pytest, Ruff, pre-commit, and GitHub Actions CI.
 
-# Installation
-To get started, clone the repository and install the required dependencies using the following commands:
+## README Figures
+
+The interface figure shows how the CLI, YAML config, sandbox, and vs-AI mode fit together.
+
+![Chess interface modes](docs/assets/interface-modes.svg)
+
+The move-flow figure mirrors the drag-and-drop path in [src/chess/core/board.py](src/chess/core/board.py), from mouse input through legal move validation and board updates.
+
+![Drag-and-drop move flow](docs/assets/move-flow.svg)
+
+The AI figure summarizes the minimax search path in [src/chess/ai/minmax.py](src/chess/ai/minmax.py).
+
+![Minimax alpha-beta search flow](docs/assets/minimax-search.svg)
+
+Regenerate the deterministic SVG README figures with:
 
 ```bash
-git clone
-cd chess
-pip install -r requirements.txt
+python3 scripts/generate_readme_assets.py
 ```
 
-# Usage
-To run the interactive gameplay script, execute the following command:
+The opening banner was generated as a stylized visual asset for this README and saved at `docs/assets/chess-minimax-hero.png`.
+
+## Install
 
 ```bash
-python play.py
+cd ~/Projects/Chess
+uv venv
+uv pip install -e ".[dev]"
 ```
 
-To train a reinforcement learning agent, run the following command:
+## Run
+
+Smoke check (no window):
 
 ```bash
-python train.py
+uv run pytest tests/test_smoke.py -v
 ```
 
-## Setting Configurations
-You can modify the configurations for the gameplay script and reinforcement learning agent by editing the `config.yaml` file. Here, you can adjust parameters such as the board size, number of agents, and training iterations...
+**Sandbox** — drag pieces, add new ones from the side panel:
 
-# How to Contribute
-We welcome contributions from the community! If you're interested in enhancing the project, please follow these steps:
+```bash
+uv run chess play
+```
 
-1. Fork the repository
-2. Create a new branch (`git checkout -b feature`)
-3. Make your changes
-4. Commit your changes (`git commit -am 'Add feature'`)
-5. Push to the branch (`git push origin feature`)
-6. Create a new Pull Request
+**Vs AI** — you play White:
 
-# License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```bash
+uv run chess play-ai
+# override search depth
+uv run chess play-ai --depth 4
+```
+
+## Tests
+
+```bash
+uv run pytest -v
+uv run pre-commit run --all-files
+```
+
+## Config
+
+Default file: `configs/default.yaml`. Override with `--config`. CLI flags override YAML only when noted.
+
+| Key | Default | Notes |
+|-----|---------|-------|
+| `display.square_size` | `100` | Pixel size of each square (40–200) |
+| `display.sandbox_width` | `1050` | Sandbox window width |
+| `display.sandbox_height` | `860` | Sandbox window height |
+| `display.vs_ai_width` | *(auto)* | Ignored — window size derived from `square_size` |
+| `display.vs_ai_height` | *(auto)* | Ignored — window size derived from `square_size` |
+| `ai.depth` | `3` | Minimax depth (1–8); `--depth` on `play-ai` overrides |
+| `ai.workers` | `0` | CPU workers for search (`0` = all cores, `1` = single-threaded) |
+| `ai.color` | `black` | AI side (`white` or `black`) |
+| `ai.max_n_samples` | `null` | Random move subsample cap for search |
+| `game.promotion` | `queen` | Pawn promotion piece |
+
+CI uses `configs/smoke.yaml` (depth 1, smaller display).
+
+## Paths
+
+| Path | Contents |
+|------|----------|
+| `assets/` | Committed piece PNGs |
+| `src/chess/ui/colors.py` | Shared board and panel colors used by the app and README figures |
+| `artifacts/` | Run outputs (gitignored) |
+| `configs/` | YAML settings |
+| `docs/assets/` | Generated README banner and deterministic SVG figures |
+| `scripts/generate_readme_assets.py` | Rebuilds the README SVG figures |

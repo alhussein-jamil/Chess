@@ -1,10 +1,14 @@
 import dataclasses as dc
 from pathlib import Path
-from typing import TYPE_CHECKING, List
-from ...globals import MoveState, Color, PieceType
+from typing import TYPE_CHECKING
+
+from chess.core.types import Color, MoveState, PieceType
+from chess.paths import ASSETS_DIR
 
 if TYPE_CHECKING:
-    from .board import Board
+    from chess.core.board import Board
+
+_ASSETS_DIR = ASSETS_DIR
 
 
 @dc.dataclass
@@ -35,12 +39,8 @@ class Position:
 def update_attacking_squares(func):
     def wrapper(*args, **kwargs):
         piece = args[0]
-        result = func(
-            *args, **kwargs
-        )  # Call the original function and store its result
-        piece.attacking_squares = [
-            pos for pos in piece.legal_moves if isinstance(pos, Position)
-        ]
+        result = func(*args, **kwargs)  # Call the original function and store its result
+        piece.attacking_squares = [pos for pos in piece.legal_moves if isinstance(pos, Position)]
         return result  # Return the result of the original function call
 
     return wrapper
@@ -55,14 +55,14 @@ class Piece:
     icon_path: Path = Path.cwd()
     moved: int = 0
     created: bool = False
-    legal_moves: List = dc.field(default_factory=list)
-    attacking_squares: List = dc.field(default_factory=list)
+    legal_moves: list = dc.field(default_factory=list)
+    attacking_squares: list = dc.field(default_factory=list)
     max_n_legal_moves: int = 0
     value: int = 0
 
     def __post_init__(self):
-        self.icon_path = Path(
-            f"assets/{self.piece_type.name.lower()}_{self.color.name.lower()}.png"
+        self.icon_path = (
+            _ASSETS_DIR / f"{self.piece_type.name.lower()}_{self.color.name.lower()}.png"
         )
 
     def __str__(self):
@@ -146,9 +146,7 @@ class Pawn(Piece):
         moves = []
         attacking_squares = []
         direction = -1 if self.color == Color.WHITE else 1
-        if isinstance(
-            board.get(Position(self.position.x, self.position.y + direction)), NullPiece
-        ):
+        if isinstance(board.get(Position(self.position.x, self.position.y + direction)), NullPiece):
             moves.append(Position(self.position.x, self.position.y + direction))
             if self.moved == 0 and isinstance(
                 board.get(Position(self.position.x, self.position.y + 2 * direction)),
@@ -160,23 +158,14 @@ class Pawn(Piece):
             if not isinstance(
                 board.get(Position(self.position.x - i, self.position.y + direction)),
                 NullPiece,
+            ) and (
+                board.get(Position(self.position.x - i, self.position.y + direction)).color
+                != self.color
             ):
-                if (
-                    board.get(
-                        Position(self.position.x - i, self.position.y + direction)
-                    ).color
-                    != self.color
-                ):
-                    moves.append(
-                        Position(self.position.x - i, self.position.y + direction)
-                    )
-            attacking_squares.append(
-                Position(self.position.x - i, self.position.y + direction)
-            )
+                moves.append(Position(self.position.x - i, self.position.y + direction))
+            attacking_squares.append(Position(self.position.x - i, self.position.y + direction))
 
-        self.legal_moves = [
-            move for move in moves if not isinstance(board.get(move), OffBoard)
-        ]
+        self.legal_moves = [move for move in moves if not isinstance(board.get(move), OffBoard)]
 
         self.attacking_squares = attacking_squares
 
@@ -221,9 +210,7 @@ class Rook(Piece):
         for y_dis in range(-1, -8, -1):
             if check_displacement(0, y_dis):
                 break
-        self.legal_moves = [
-            move for move in moves if not isinstance(board.get(move), OffBoard)
-        ]
+        self.legal_moves = [move for move in moves if not isinstance(board.get(move), OffBoard)]
 
 
 @dc.dataclass
@@ -244,9 +231,7 @@ class Bishop(Piece):
                     moves.append(Position(self.position.x + i, self.position.y + i))
                 else:
                     if (
-                        board.get(
-                            Position(self.position.x + i, self.position.y + i)
-                        ).color
+                        board.get(Position(self.position.x + i, self.position.y + i)).color
                         != self.color
                     ):
                         moves.append(Position(self.position.x + i, self.position.y + i))
@@ -260,9 +245,7 @@ class Bishop(Piece):
                     moves.append(Position(self.position.x - i, self.position.y - i))
                 else:
                     if (
-                        board.get(
-                            Position(self.position.x - i, self.position.y - i)
-                        ).color
+                        board.get(Position(self.position.x - i, self.position.y - i)).color
                         != self.color
                     ):
                         moves.append(Position(self.position.x - i, self.position.y - i))
@@ -276,9 +259,7 @@ class Bishop(Piece):
                     moves.append(Position(self.position.x + i, self.position.y - i))
                 else:
                     if (
-                        board.get(
-                            Position(self.position.x + i, self.position.y - i)
-                        ).color
+                        board.get(Position(self.position.x + i, self.position.y - i)).color
                         != self.color
                     ):
                         moves.append(Position(self.position.x + i, self.position.y - i))
@@ -292,16 +273,12 @@ class Bishop(Piece):
                     moves.append(Position(self.position.x - i, self.position.y + i))
                 else:
                     if (
-                        board.get(
-                            Position(self.position.x - i, self.position.y + i)
-                        ).color
+                        board.get(Position(self.position.x - i, self.position.y + i)).color
                         != self.color
                     ):
                         moves.append(Position(self.position.x - i, self.position.y + i))
                     break
-        self.legal_moves = [
-            move for move in moves if not isinstance(board.get(move), OffBoard)
-        ]
+        self.legal_moves = [move for move in moves if not isinstance(board.get(move), OffBoard)]
 
 
 @dc.dataclass
@@ -332,9 +309,7 @@ class Knight(Piece):
                     and board.get(new_position).color != self.color
                 ):
                     moves.append(new_position)
-        self.legal_moves = [
-            move for move in moves if not isinstance(board.get(move), OffBoard)
-        ]
+        self.legal_moves = [move for move in moves if not isinstance(board.get(move), OffBoard)]
 
 
 @dc.dataclass
@@ -348,9 +323,7 @@ class Queen(Piece):
         moves = []
         for i in range(1, 8):
             if self.position.y + i < 8:
-                if isinstance(
-                    board.get(Position(self.position.x, self.position.y + i)), NullPiece
-                ):
+                if isinstance(board.get(Position(self.position.x, self.position.y + i)), NullPiece):
                     moves.append(Position(self.position.x, self.position.y + i))
                 else:
                     if (
@@ -361,9 +334,7 @@ class Queen(Piece):
                     break
         for i in range(1, 8):
             if self.position.y - i >= 0:
-                if isinstance(
-                    board.get(Position(self.position.x, self.position.y - i)), NullPiece
-                ):
+                if isinstance(board.get(Position(self.position.x, self.position.y - i)), NullPiece):
                     moves.append(Position(self.position.x, self.position.y - i))
                 else:
                     if (
@@ -374,9 +345,7 @@ class Queen(Piece):
                     break
         for i in range(1, 8):
             if self.position.x + i < 8:
-                if isinstance(
-                    board.get(Position(self.position.x + i, self.position.y)), NullPiece
-                ):
+                if isinstance(board.get(Position(self.position.x + i, self.position.y)), NullPiece):
                     moves.append(Position(self.position.x + i, self.position.y))
                 else:
                     if (
@@ -387,9 +356,7 @@ class Queen(Piece):
                     break
         for i in range(1, 8):
             if self.position.x - i >= 0:
-                if isinstance(
-                    board.get(Position(self.position.x - i, self.position.y)), NullPiece
-                ):
+                if isinstance(board.get(Position(self.position.x - i, self.position.y)), NullPiece):
                     moves.append(Position(self.position.x - i, self.position.y))
                 else:
                     if (
@@ -407,9 +374,7 @@ class Queen(Piece):
                     moves.append(Position(self.position.x + i, self.position.y + i))
                 else:
                     if (
-                        board.get(
-                            Position(self.position.x + i, self.position.y + i)
-                        ).color
+                        board.get(Position(self.position.x + i, self.position.y + i)).color
                         != self.color
                     ):
                         moves.append(Position(self.position.x + i, self.position.y + i))
@@ -423,9 +388,7 @@ class Queen(Piece):
                     moves.append(Position(self.position.x - i, self.position.y - i))
                 else:
                     if (
-                        board.get(
-                            Position(self.position.x - i, self.position.y - i)
-                        ).color
+                        board.get(Position(self.position.x - i, self.position.y - i)).color
                         != self.color
                     ):
                         moves.append(Position(self.position.x - i, self.position.y - i))
@@ -439,9 +402,7 @@ class Queen(Piece):
                     moves.append(Position(self.position.x + i, self.position.y - i))
                 else:
                     if (
-                        board.get(
-                            Position(self.position.x + i, self.position.y - i)
-                        ).color
+                        board.get(Position(self.position.x + i, self.position.y - i)).color
                         != self.color
                     ):
                         moves.append(Position(self.position.x + i, self.position.y - i))
@@ -455,16 +416,12 @@ class Queen(Piece):
                     moves.append(Position(self.position.x - i, self.position.y + i))
                 else:
                     if (
-                        board.get(
-                            Position(self.position.x - i, self.position.y + i)
-                        ).color
+                        board.get(Position(self.position.x - i, self.position.y + i)).color
                         != self.color
                     ):
                         moves.append(Position(self.position.x - i, self.position.y + i))
                     break
-        self.legal_moves = [
-            move for move in moves if not isinstance(board.get(move), OffBoard)
-        ]
+        self.legal_moves = [move for move in moves if not isinstance(board.get(move), OffBoard)]
 
 
 @dc.dataclass
@@ -495,9 +452,7 @@ class King(Piece):
                     and board.get(new_position).color != self.color
                 ):
                     moves.append(new_position)
-        self.legal_moves = [
-            move for move in moves if not isinstance(board.get(move), OffBoard)
-        ]
+        self.legal_moves = [move for move in moves if not isinstance(board.get(move), OffBoard)]
 
 
 STARTING_PIECES = [

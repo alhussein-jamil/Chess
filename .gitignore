@@ -1,7 +1,10 @@
+.venv/
 .vscode/
-ray_checkpoints/
-test_dir/
-ray_logs/
-ray_evals/
-*.pyc
 __pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+artifacts/
+data/
+uv.lock
